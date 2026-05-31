@@ -1,13 +1,30 @@
-# E-Teacher Mobil Uygulaması 📱
+# E-Teacher: Yapay Zeka Destekli YKS Öğrenci Asistanı
 
-Bu repository, E-Teacher platformunun **Mobil Uygulama** ayağı için hazırlanan dökümantasyonları ve ileride geliştirilecek mobil kaynak kodlarını barındırır.
+E-Teacher, üniversite sınavına (YKS) hazırlanan öğrencilere kişiselleştirilmiş çalışma programları, deneme analizleri, anlık motivasyon desteği ve yapay zeka tabanlı soru üretimi sunan kapsamlı bir eğitim asistanıdır.
 
-Platformumuzun diğer bileşenlerine aşağıdan ulaşabilirsiniz:
-* 🌐 **[Web Uygulaması (Web-app) Reposu](https://github.com/BnymGnc/E-Teacher-Web-app)** *(Canlıda ve aktif geliştiriliyor)*
-* ⚙️ **[Backend (Django API) Reposu](https://github.com/BnymGnc/E-Teacher-Backend)** *(Temel mimari hazır, Makine Öğrenmesi (ML) entegrasyonları geliştirilme aşamasındadır)*
+## 🎯 Projenin Amacı
+Geleneksel eğitim süreçlerindeki "herkese tek tip program" mantığını kırarak, her öğrencinin kendi hızına, hedefine ve psikolojik durumuna göre adapte olabilen, LLM (Büyük Dil Modeli) destekli bir mobil koç yaratmak.
 
-## 📁 Ödev Dökümanları (Faz 1)
-Aşağıdaki belgeler, mobil uygulamanın ilk sürümü için hazırlanmış teknik gereksinimleri içerir. Bu belgeler, backend tarafında geliştirilmekte olan Özel Yapay Zeka (ML) modellerinin mobile nasıl entegre edileceğini planlamaktadır:
+## 🏗️ Mimari ve Klasör Yapısı
+Proje, mikroservis mantığına uygun olarak ayrıştırılmıştır:
+* `/frontend`: React Native (Expo) ile geliştirilmiş mobil arayüz.
+* `/backend`: Django REST Framework ile geliştirilmiş, API ve yapay zeka işlemlerini yürüten sunucu katmanı.
+* `/prodocs`: Geliştirme sürecini, mimari kararları ve AI prompt stratejilerini anlatan dokümantasyonlar.
 
-* 📱 **[MVP Kapsamı (Minimum Viable Product)](./MVP_Kapsami.md)**
-* 📄 **[PRD Belgesi (Product Requirements Document)](./PRD.md)**
+## 🚀 Kullanılan Teknolojiler (Tech Stack)
+* **Backend:** Python, Django, Django REST Framework, SimpleJWT
+* **Database:** PostgreSQL (Neon DB Serverless)
+* **Frontend:** React Native, Expo, React Navigation
+* **AI Servisi:** Google Gemini API
+* **Deployment:** Render (Backend)
+
+## ⚙️ Kurulum (Local Development)
+
+**1. Backend (Django)**
+```bash
+cd backend
+python -m venv venv
+.\venv\Scripts\activate  # Mac/Linux için: source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
