@@ -16,9 +16,8 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
   const [error, setError] = useState(null);
   const [quizResult, setQuizResult] = useState(null); 
 
-  // --- İNTERAKTİF TEST STATELERİ ---
-  const [selectedAnswers, setSelectedAnswers] = useState({}); // Hangi soruda hangi şıkkı seçtiğini tutar { 0: 1, 1: 3 }
-  const [isQuizSubmitted, setIsQuizSubmitted] = useState(false); // "Testi Bitir" butonuna basılıp basılmadığını tutar
+  const [selectedAnswers, setSelectedAnswers] = useState({}); 
+  const [isQuizSubmitted, setIsQuizSubmitted] = useState(false); 
 
   const incrementCount = () => { if (questionCount < 10) setQuestionCount(prev => prev + 1); };
   const decrementCount = () => { if (questionCount > 1) setQuestionCount(prev => prev - 1); };
@@ -33,7 +32,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
     setError(null);
     setQuizResult(null);
     
-    // Yeni test üretilirken eski cevapları sıfırla
     setSelectedAnswers({});
     setIsQuizSubmitted(false);
     Keyboard.dismiss();
@@ -53,28 +51,24 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
     }
   };
 
-  // Şık işaretleme fonksiyonu
   const handleSelectOption = (questionIndex, optionIndex) => {
-    if (isQuizSubmitted) return; // Eğer test bittiyse şık değiştirmeye izin verme
+    if (isQuizSubmitted) return; 
     setSelectedAnswers(prev => ({
       ...prev,
       [questionIndex]: optionIndex
     }));
   };
 
-  // Doğru şıkkı algılama yardımcısı
   const isOptionCorrect = (correctAnswerText, optionText, optionIndex) => {
     if (!correctAnswerText) return false;
-    const letter = String.fromCharCode(65 + optionIndex); // A, B, C, D
+    const letter = String.fromCharCode(65 + optionIndex); 
     return correctAnswerText.includes(optionText) || correctAnswerText.startsWith(letter);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Kaydırma sorunu çıkaran behavior ayarı Android için null yapıldı */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         
-        {/* Üst App Bar */}
         <View style={styles.appBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.6}>
             <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
@@ -83,9 +77,10 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
           <View style={styles.placeholderBtn} />
         </View>
 
-        {/* Scroll Content içine flexGrow eklendi */}
+        {/* KAYDIRMA (SCROLL) SORUNUNU ÇÖZEN KRİTİK KISIM: style={{ flex: 1 }} eklendi */}
         <ScrollView 
-          showsVerticalScrollIndicator={false} 
+          style={{ flex: 1 }} 
+          showsVerticalScrollIndicator={true} 
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
@@ -178,7 +173,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
                           const isSelected = selectedAnswers[qIndex] === optIndex;
                           const isCorrect = isOptionCorrect(item.correctAnswer, opt, optIndex);
 
-                          // Şıkların Stilleri (İşaretleme ve Teslim Sonrası Renkler)
                           let optionBtnStyle = [styles.optionBtn, { borderColor: theme.border, backgroundColor: theme.background }];
                           let optionTextStyle = [styles.optionText, { color: theme.text }];
 
@@ -211,7 +205,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
                           );
                         })}
                         
-                        {/* Çözüm ve Doğru Cevap Kutusu (SADECE TEST BİTİNCE AÇILIR) */}
                         {isQuizSubmitted && (
                           <View style={[styles.answerBox, { backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5' }]}>
                             <Text style={[styles.correctAnswerText, { color: isDarkMode ? '#34d399' : '#059669' }]}>
@@ -227,7 +220,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
                       </View>
                     ))}
 
-                    {/* Testi Bitir Butonu */}
                     {!isQuizSubmitted && (
                       <TouchableOpacity 
                         style={styles.submitQuizBtn} 
@@ -264,8 +256,8 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   placeholderBtn: { width: 44, height: 44 },
   appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center' },
   
-  // Kaydırma sorunu için flexGrow eklendi
-  scrollContent: { padding: 16, paddingBottom: 60, flexGrow: 1 },
+  // KAYDIRMA (SCROLL) İÇİN PADDING BOTTOM İYİCE ARTIRILDI
+  scrollContent: { padding: 16, paddingBottom: 150, flexGrow: 1 },
 
   cardContainer: { backgroundColor: theme.surface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: theme.border, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDarkMode ? 0.3 : 0.05, shadowRadius: 4 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
@@ -298,7 +290,6 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   resultContent: { backgroundColor: theme.surface, padding: 20, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderWidth: 1, borderColor: theme.border, borderTopWidth: 0 },
   resultText: { fontSize: 15, lineHeight: 26 },
 
-  // İNTERAKTİF QUİZ STİLLERİ
   questionCard: { marginBottom: 24, paddingBottom: 20, borderBottomWidth: 1, borderColor: theme.border },
   questionText: { fontSize: 16, fontWeight: 'bold', marginBottom: 16, lineHeight: 24 },
   
