@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, TextInput, Alert, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import api from '../../api';
@@ -36,24 +36,30 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   // Havuz Yönetimi Modalı
   const [poolManageModalVisible, setPoolManageModalVisible] = useState(false);
   const [newLessonName, setNewLessonName] = useState('');
-  const [newLessonHours, setNewLessonHours] = useState('1');
+  const [newLessonHours, setNewLessonHours] = useState('1'); // Stepper başlangıcı
 
   // Ders Seçim Modalı
   const [lessonModalVisible, setLessonModalVisible] = useState(false);
   const [selectedHourForLesson, setSelectedHourForLesson] = useState(null);
   const [manualLessonInput, setManualLessonInput] = useState('');
 
-  // 1. ÖNCEKİ KAYITLI PROGRAMI YÜKLE
+  // 1. KAYITLI PROGRAMI VE HAVUZU BACKENDDEN ÇEKME
   useEffect(() => {
     const loadSavedSchedule = async () => {
       try {
         const res = await api.get('/schedule/');
-        if (res.data && res.data.plan && res.data.pool) {
-          setWeeklyPlan(res.data.plan);
-          setLessonPool(res.data.pool);
+        if (res.data) {
+          // Gelen veri formatına göre esnek eşleştirme yapılıyor
+          if (res.data.plan && res.data.pool) {
+            setWeeklyPlan(res.data.plan);
+            setLessonPool(res.data.pool);
+          } else if (res.data.schedule && typeof res.data.schedule === 'object' && !Array.isArray(res.data.schedule)) {
+            setWeeklyPlan(res.data.schedule.plan || createInitialPlan());
+            setLessonPool(res.data.schedule.pool || []);
+          }
         }
       } catch (err) {
-        console.log("Henüz kayıtlı bir program yok.");
+        console.log("Kayıtlı takvim verisi bulunamadı veya ilk defa oluşturuluyor.");
       } finally {
         setInitialLoading(false);
       }
@@ -61,14 +67,14 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     loadSavedSchedule();
   }, []);
 
-  // 2. ÇIKIŞ KORUMASI
+  // 2. SAYFADAN ÇIKARKEN DEĞİŞİKLİK KONTROLÜ VE UYARI
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (!hasUnsavedChanges) return;
       e.preventDefault();
       Alert.alert(
-        'Kaydetmeden Çıkıyorsunuz!',
-        'Ders programınızda değişiklikler var. Kaydetmeden çıkmak istediğinize emin misiniz?',
+        'Değişiklikler Kaydedilmedi!',
+        'Yaptığınız düzenlemeleri kaydetmeden çıkmak istiyor musunuz?',
         [
           { text: 'İptal, Kal', style: 'cancel', onPress: () => {} },
           { text: 'Evet, Çık', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
@@ -81,18 +87,24 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   // 3. DERS HAVUZU İŞLEMLERİ
   const handleAddLessonToPool = () => {
     if (newLessonName.trim() === '') {
-      Alert.alert('Uyarı', 'Lütfen ders adı girin.');
+      Alert.alert('Uyarı', 'Lütfen geçerli bir ders adı girin.');
       return;
     }
     const hours = parseInt(newLessonHours);
     if (isNaN(hours) || hours <= 0) return;
 
+    // Aynı isme sahip ders kontrolü
+    if (lessonPool.some(l => l.name.toLowerCase() === newLessonName.trim().toLowerCase())) {
+      Alert.alert('Uyarı', 'Bu ders zaten havuzunuzda mevcut.');
+      return;
+    }
+
     const nextColor = LESSON_COLORS[lessonPool.length % LESSON_COLORS.length];
-    const newLesson = { id: Date.now().toString(), name: newLessonName, hours: hours, color: nextColor };
+    const newLesson = { id: Date.now().toString(), name: newLessonName.trim(), hours: hours, color: nextColor };
     
     setLessonPool([...lessonPool, newLesson]);
     setNewLessonName('');
-    setNewLessonHours('1');
+    setNewLessonHours('1'); // Reset
     setHasUnsavedChanges(true);
   };
 
@@ -101,7 +113,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setHasUnsavedChanges(true);
   };
 
-  // 4. MÜSAİTLİK DURUMUNU DEĞİŞTİRME
+  // 4. SAAT MÜSAİTLİK DURUMU DEĞİŞTİRME
   const toggleAvailability = (hour) => {
     const currentStatus = weeklyPlan[selectedDay][hour].status;
     let nextStatus = 'available';
@@ -115,10 +127,10 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setHasUnsavedChanges(true);
   };
 
-  // 5. DERS SEÇİMİ
+  // 5. MANUEL VEYA HAVUZDAN DERS ATAMA İŞLEMLERİ
   const openLessonModal = (hour) => {
     if (weeklyPlan[selectedDay][hour].status === 'busy') {
-      Alert.alert('Meşgul Saat', 'Bu saat dilimi (Kırmızı) meşgul işaretli. Önce sol taraftan müsaitliği değiştirin.');
+      Alert.alert('Meşgul Zaman', 'Kırmızı işaretli zaman dilimlerine ders eklenemez. Önce müsaitlik durumunu değiştirin.');
       return;
     }
     setSelectedHourForLesson(hour);
@@ -144,7 +156,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
       ...prev,
       [selectedDay]: { 
         ...prev[selectedDay], 
-        [selectedHourForLesson]: { ...prev[selectedDay][selectedHourForLesson], lessonName: manualLessonInput, lessonColor: theme.primary } 
+        [selectedHourForLesson]: { ...prev[selectedDay][selectedHourForLesson], lessonName: manualLessonInput.trim(), lessonColor: theme.primary } 
       }
     }));
     setHasUnsavedChanges(true);
@@ -163,24 +175,22 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setLessonModalVisible(false);
   };
 
-  // 6. GELİŞMİŞ ALGORİTMA: AI PROGRAM OLUŞTURUCU
-  const handleAIGenerate = async () => {
+  // 6. DETAYLI AI DERS PROGRAMI ÖNERİ ALGORİTMASI
+  const handleAIGenerate = () => {
     if (lessonPool.length === 0) {
-      Alert.alert('Uyarı', 'Lütfen önce havuz yönetimi panelinden ders ekleyin.');
+      Alert.alert('Uyarı', 'Lütfen önce ders havuzuna çalışmak istediğiniz dersleri ekleyin.');
       return;
     }
     setAiLoading(true);
 
     const totalRequiredHours = lessonPool.reduce((sum, lesson) => sum + lesson.hours, 0);
-
     const greenSlots = [];
     const yellowSlots = [];
 
-    // Müsait ve esnek alanları bul
     DAYS.forEach(day => {
       HOURS.forEach(hour => {
         const slot = weeklyPlan[day][hour];
-        if (!slot.lessonName) { // Sadece boş olanlara atama yapılacak
+        if (!slot.lessonName) {
           if (slot.status === 'available') greenSlots.push({ day, hour });
           else if (slot.status === 'tentative') yellowSlots.push({ day, hour });
         }
@@ -189,24 +199,23 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
     const totalAvailable = greenSlots.length + yellowSlots.length;
 
-    // KAPASİTE KONTROLÜ
+    // KAPASİTE YETERLİLİK UYARISI
     if (totalRequiredHours > totalAvailable) {
       setAiLoading(false);
-      Alert.alert('Kapasite Hatası', `Havuzdaki dersleriniz toplam ${totalRequiredHours} saat. Ancak takvimde sadece ${totalAvailable} saat müsait alan (Yeşil+Sarı) var. Müsaitliği artırın veya ders saatini azaltın.`);
+      Alert.alert('Kapasite Yetersiz', `Toplam ders saati hedefiniz ${totalRequiredHours} saat. Ancak takvimde boş olan toplam alan (Yeşil + Sarı) ${totalAvailable} saat. Lütfen müsait saatlerinizi artırın.`);
       return;
     }
 
     let newPlan = JSON.parse(JSON.stringify(weeklyPlan));
     let remainingLessons = JSON.parse(JSON.stringify(lessonPool));
 
-    // Yerleştirme Algoritması
     const findAndPlace = (lesson, hoursToPlace, preferStatus) => {
       let placed = 0;
       while (placed < hoursToPlace) {
          let chunk = (hoursToPlace - placed >= 2) ? 2 : 1;
          let chunkPlaced = false;
 
-         // 2'şerli (Ardışık) atama dene
+         // İstenen öncelikli alanda 2'şerli ardışık boşluk arama mantığı
          if (chunk === 2) {
            for (let d of DAYS) {
              for (let i = 0; i < HOURS.length - 1; i++) {
@@ -229,7 +238,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
            }
          }
 
-         // Ardışık bulunamadıysa tekli (1 saatlik) atama yap
+         // Ardışık alan yoksa tekli boş slotlara atama yapma
          if (!chunkPlaced) {
            for (let d of DAYS) {
              for (let h of HOURS) {
@@ -245,43 +254,62 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
            }
          }
 
-         // Eğer bu öncelikte (Yeşil veya Sarı) hiç yerleştirilemezse döngüyü kır, diğerine geç
          if (!chunkPlaced) break; 
       }
       return placed;
     };
 
-    // Tüm havuzdaki dersleri dön
-    for (let i = 0; i < remainingLessons.length; i++) {
-        let lesson = remainingLessons[i];
+    // Tüm havuzu dağıt (Önce yeşil müsaitlik, sonra sarı esneklik)
+    remainingLessons.forEach(lesson => {
         let h = lesson.hours;
-        
-        // 1. Öncelik: Yeşillere (Müsait) atama
         let placedInGreen = findAndPlace(lesson, h, 'available');
         h -= placedInGreen;
         
-        // 2. Öncelik: Kalan ders saati varsa Sarılara (Esnek) atama
         if (h > 0) {
-            let placedInYellow = findAndPlace(lesson, h, 'tentative');
-            h -= placedInYellow;
+            findAndPlace(lesson, h, 'tentative');
         }
-    }
+    });
 
     setWeeklyPlan(newPlan);
     setHasUnsavedChanges(true);
     setAiLoading(false);
-    Alert.alert('Başarılı', 'Dersleriniz 2\'şer saatlik bloklar öncelikli olmak üzere, önce yeşil (müsait) sonra sarı (esnek) alanlara dağıtıldı!');
+    Alert.alert('Başarılı', 'Dersleriniz, 2\'şerli ardışık saat blokları öncelikli olacak şekilde takviminize otomatik olarak yerleştirildi.');
   };
 
-  // 7. BACKEND'E KAYIT
+  // 7. BACKEND KAYIT VE ZORUNLU YERLEŞİM KONTROLÜ (VALIDATION)
   const handleSaveToBackend = async () => {
+    // Tüm eklenen derslerin en az bir saate yerleştirildiğini doğrulama adımı
+    const assignedLessons = new Set();
+    DAYS.forEach(day => {
+      HOURS.forEach(hour => {
+        if (weeklyPlan[day][hour].lessonName) {
+          assignedLessons.add(weeklyPlan[day][hour].lessonName);
+        }
+      });
+    });
+
+    const unassigned = lessonPool.filter(lesson => !assignedLessons.has(lesson.name));
+    
+    if (unassigned.length > 0) {
+      const names = unassigned.map(l => l.name).join(', ');
+      Alert.alert(
+        'Eksik Ders Yerleşimi',
+        `Ders havuzuna eklediğiniz tüm derslerin haftalık planda en az bir saate yerleştirilmesi zorunludur.\n\nYerleştirilmeyen Dersler:\n${names}`
+      );
+      return;
+    }
+
     setLoading(true);
     try {
-      await api.post('/schedule/', { plan: weeklyPlan, pool: lessonPool });
+      // Profil sayfasının listeleme yapısına tam uyumluluk sağlamak adına temiz nesne mimarisi gönderiliyor
+      await api.post('/schedule/', { 
+        plan: weeklyPlan, 
+        pool: lessonPool 
+      });
       setHasUnsavedChanges(false);
-      Alert.alert('Başarılı', 'Haftalık programınız sisteme kaydedildi.');
+      Alert.alert('Başarılı', 'Haftalık çalışma planınız sisteme başarıyla kaydedildi.');
     } catch (err) {
-      Alert.alert('Hata', 'Kaydedilirken bir hata oluştu.');
+      Alert.alert('Hata', 'Kaydedilirken bulut sunucu bağlantısında bir sorun oluştu.');
     } finally {
       setLoading(false);
     }
@@ -295,7 +323,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
   if (initialLoading) {
     return (
-      <View style={{flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center'}}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
@@ -314,11 +342,11 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         </TouchableOpacity>
       </View>
 
-      {/* Yatay Ders Havuzu & Yönetim Butonu */}
+      {/* Yatay Ders Havuzu Gösterimi */}
       <View style={styles.poolStripContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.poolScroll}>
           {lessonPool.length === 0 && (
-            <Text style={styles.emptyPoolStripText}>Henüz havuzda ders yok. Sağdaki butondan ekleyin.</Text>
+            <Text style={styles.emptyPoolStripText}>Havuz boş. Sağdaki panelden ders ekleyin.</Text>
           )}
           {lessonPool.map(lesson => (
             <View key={lesson.id} style={[styles.poolChip, { backgroundColor: lesson.color + '20', borderColor: lesson.color }]}>
@@ -332,7 +360,8 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         </TouchableOpacity>
       </View>
 
-      <View style={{ borderBottomWidth: 1, borderColor: theme.border, paddingBottom: 10, marginTop: 10 }}>
+      {/* Gün Seçim Menüsü */}
+      <View style={styles.daysContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysScroll}>
           {DAYS.map((day) => (
             <TouchableOpacity key={day} style={[styles.dayCard, selectedDay === day && styles.dayCardActive]} onPress={() => setSelectedDay(day)}>
@@ -342,9 +371,9 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         </ScrollView>
       </View>
 
-      {/* Ana Saat ve Ders Matrisi */}
+      {/* Saat ve Ders Matrisi Alanı */}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.hoursContainer}>
-        <Text style={styles.infoText}>Müsaitliği değiştirmek için saat kutucuğuna, ders seçmek için sağdaki geniş alana dokunun.</Text>
+        <Text style={styles.infoText}>Müsaitlik ayarı için sola, ders yerleşimi için sağdaki alana dokunun.</Text>
         
         {HOURS.map((hour) => {
           const slot = weeklyPlan[selectedDay][hour];
@@ -379,7 +408,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
                   </View>
                 ) : (
                   <Text style={styles.emptyLessonText}>
-                    {slot.status === 'busy' ? 'Bu saat meşgul.' : '+ Ders seçmek için dokun'}
+                    {slot.status === 'busy' ? 'Bu saat dilimi meşgul.' : '+ Ders eklemek için dokun'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -389,23 +418,23 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         })}
       </ScrollView>
 
-      {/* Genişletilmiş AI Butonu */}
-      <TouchableOpacity style={[styles.fabExtended, lessonPool.length === 0 && { opacity: 0.6 }]} onPress={handleAIGenerate} disabled={aiLoading || lessonPool.length === 0}>
+      {/* SAĞ ALT SABİT DERS PROGRAMI ÖNER FAB BUTONU */}
+      <TouchableOpacity style={[styles.fabExtended, lessonPool.length === 0 && { opacity: 0.6 }]} onPress={handleAIGenerate} disabled={aiLoading || lessonPool.length === 0} activeOpacity={0.8}>
         {aiLoading ? (
           <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
         ) : (
           <MaterialIcons name="auto-awesome" size={22} color="#fff" style={{ marginRight: 8 }} />
         )}
-        <Text style={styles.fabText}>Program Oluştur</Text>
+        <Text style={styles.fabText}>Ders Programı Öner</Text>
       </TouchableOpacity>
 
-      {/* MODAL 1: Havuz Yönetimi Modalı */}
+      {/* MODAL 1: DERS HAVUZU YÖNETİMİ PANELİ */}
       <Modal animationType="slide" transparent={true} visible={poolManageModalVisible} onRequestClose={() => setPoolManageModalVisible(false)}>
         <View style={styles.bottomSheetOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.bottomSheetContent}>
             <View style={styles.sheetHandle} />
             <Text style={styles.modalTitle}>Ders Havuzu Yönetimi</Text>
-            <Text style={styles.modalSubTitle}>Haftalık çalışmak istediğiniz dersleri ve saat hedeflerini buradan ekleyip çıkarabilirsiniz.</Text>
+            <Text style={styles.modalSubTitle}>Çalışacağınız dersleri ve haftalık saat hedeflerini belirleyin.</Text>
             
             <ScrollView style={styles.managePoolList} showsVerticalScrollIndicator={false}>
               {lessonPool.length > 0 ? lessonPool.map(lesson => (
@@ -419,14 +448,37 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
                   </TouchableOpacity>
                 </View>
               )) : (
-                <Text style={styles.emptyPoolText}>Havuz boş. Aşağıdan yeni ders ekleyin.</Text>
+                <Text style={styles.emptyPoolText}>Havuzda ders yok. Aşağıdan yenisini tanımlayın.</Text>
               )}
             </ScrollView>
 
-            <Text style={styles.sectionHeader}>Yeni Ders Ekle</Text>
+            <Text style={styles.sectionHeader}>Yeni Ders Tanımla</Text>
             <View style={styles.manualInputRow}>
-              <TextInput style={[styles.manualInput, { flex: 2 }]} placeholder="Ders Adı (Örn: Fizik)" placeholderTextColor={theme.textSecondary} value={newLessonName} onChangeText={setNewLessonName} />
-              <TextInput style={[styles.manualInput, { flex: 1, marginHorizontal: 8 }]} placeholder="Saat" keyboardType="numeric" placeholderTextColor={theme.textSecondary} value={newLessonHours} onChangeText={setNewLessonHours} />
+              <TextInput style={[styles.manualInput, { flex: 2 }]} placeholder="Ders Adı" placeholderTextColor={theme.textSecondary} value={newLessonName} onChangeText={setNewLessonName} />
+              
+              {/* ARTI-EKSİ LOGOLU STEPPER SAAT SEÇİCİ */}
+              <View style={styles.stepperContainer}>
+                <TouchableOpacity 
+                  style={styles.stepperBtn} 
+                  onPress={() => {
+                    const current = parseInt(newLessonHours) || 1;
+                    if (current > 1) setNewLessonHours((current - 1).toString());
+                  }}
+                >
+                  <MaterialIcons name="remove" size={18} color="#fff" />
+                </TouchableOpacity>
+                <Text style={[styles.stepperText, { color: theme.text }]}>{newLessonHours}s</Text>
+                <TouchableOpacity 
+                  style={styles.stepperBtn} 
+                  onPress={() => {
+                    const current = parseInt(newLessonHours) || 1;
+                    if (current < 16) setNewLessonHours((current + 1).toString());
+                  }}
+                >
+                  <MaterialIcons name="add" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity style={styles.manualBtn} onPress={handleAddLessonToPool}>
                 <Text style={styles.manualBtnText}>Ekle</Text>
               </TouchableOpacity>
@@ -439,15 +491,15 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         </View>
       </Modal>
 
-      {/* MODAL 2: Ders Seçim Paneli */}
+      {/* MODAL 2: DERS SEÇİM VE MANUEL ATAMA PANELİ */}
       <Modal animationType="slide" transparent={true} visible={lessonModalVisible} onRequestClose={() => setLessonModalVisible(false)}>
         <View style={styles.bottomSheetOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.bottomSheetContent}>
             <View style={styles.sheetHandle} />
             <Text style={styles.modalTitle}>{selectedDay} - Saat {selectedHourForLesson}</Text>
-            <Text style={styles.modalSubTitle}>Bu saate yerleştireceğiniz dersi havuzdan seçin veya manuel yazın.</Text>
+            <Text style={styles.modalSubTitle}>Aşağıdan havuz derslerini yerleştirin veya yeni bir etüt ismi yazın.</Text>
             
-            <Text style={styles.sectionHeader}>Havuzdaki Dersler</Text>
+            <Text style={styles.sectionHeader}>Havuzdaki Dersleriniz</Text>
             <ScrollView style={styles.sheetPoolList} showsVerticalScrollIndicator={false}>
               {lessonPool.length > 0 ? lessonPool.map(lesson => (
                 <TouchableOpacity key={lesson.id} style={[styles.sheetPoolItem, { borderColor: lesson.color, backgroundColor: lesson.color + '15' }]} onPress={() => assignLessonFromPool(lesson)}>
@@ -456,13 +508,13 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
                   <MaterialIcons name="check-circle-outline" size={20} color={lesson.color} />
                 </TouchableOpacity>
               )) : (
-                <Text style={styles.emptyPoolText}>Havuzda hiç ders yok. Önce yönetim panelinden ekleyin.</Text>
+                <Text style={styles.emptyPoolText}>Havuz boş. Önce ana panelden havuzu doldurun.</Text>
               )}
             </ScrollView>
 
-            <Text style={styles.sectionHeader}>Veya Manuel Girin</Text>
+            <Text style={styles.sectionHeader}>Veya Manuel Program Girin</Text>
             <View style={styles.manualInputRow}>
-              <TextInput style={[styles.manualInput, {marginRight: 8}]} placeholder="Örn: Deneme Çözümü" placeholderTextColor={theme.textSecondary} value={manualLessonInput} onChangeText={setManualLessonInput} />
+              <TextInput style={[styles.manualInput, {marginRight: 8}]} placeholder="Örn: Paragraf + Problem Kampı" placeholderTextColor={theme.textSecondary} value={manualLessonInput} onChangeText={setManualLessonInput} />
               <TouchableOpacity style={styles.manualBtn} onPress={assignManualLesson}>
                 <Text style={styles.manualBtnText}>Ekle</Text>
               </TouchableOpacity>
@@ -470,11 +522,11 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
             <View style={[styles.modalButtons, { marginTop: 20 }]}>
               <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setLessonModalVisible(false)}>
-                <Text style={styles.modalBtnCancelText}>Kapat</Text>
+                <Text style={styles.modalBtnCancelText}>Vazgeç</Text>
               </TouchableOpacity>
               {weeklyPlan[selectedDay][selectedHourForLesson]?.lessonName !== '' && (
                 <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#ef4444' }]} onPress={removeAssignedLesson}>
-                  <Text style={styles.modalBtnSaveText}>Dersi Sil</Text>
+                  <Text style={styles.modalBtnSaveText}>Programı Temizle</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -488,6 +540,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
 const createStyles = (theme, isDarkMode) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.background },
+  loadingContainer: { flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' },
   appBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: Platform.OS === 'android' ? 76 : 64, paddingTop: Platform.OS === 'android' ? 24 : 0, backgroundColor: theme.surface, borderBottomWidth: 1, borderColor: theme.border },
   backBtn: { width: 40, height: 44, justifyContent: 'center' },
   appBarTitle: { fontSize: 17, fontWeight: 'bold', color: theme.text },
@@ -501,6 +554,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   poolChipText: { fontSize: 13, fontWeight: 'bold' },
   poolManageBtn: { padding: 16, borderLeftWidth: 1, borderColor: theme.border, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background },
 
+  daysContainer: { borderBottomWidth: 1, borderColor: theme.border, paddingBottom: 10, marginTop: 10 },
   daysScroll: { paddingHorizontal: 16, gap: 10 },
   dayCard: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
   dayCardActive: { backgroundColor: theme.text, borderColor: theme.text },
@@ -522,7 +576,8 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   lessonText: { fontSize: 15, fontWeight: 'bold', flex: 1 },
   emptyLessonText: { fontSize: 13, color: theme.textSecondary, fontStyle: 'italic' },
 
-  fabExtended: { position: 'absolute', bottom: 24, right: 24, flexDirection: 'row', backgroundColor: theme.primary, paddingHorizontal: 20, height: 56, borderRadius: 28, alignItems: 'center', elevation: 6, shadowColor: theme.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 6 },
+  // SABİT SAĞ ALT FAB KONUMU
+  fabExtended: { position: 'absolute', bottom: 24, right: 24, flexDirection: 'row', backgroundColor: theme.primary, paddingHorizontal: 20, height: 56, borderRadius: 28, alignItems: 'center', elevation: 6, shadowColor: theme.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 6, zIndex: 99 },
   fabText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -543,11 +598,16 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   
   emptyPoolText: { fontSize: 13, color: theme.textSecondary, fontStyle: 'italic', paddingVertical: 10 },
 
-  manualInputRow: { flexDirection: 'row', alignItems: 'center' },
+  manualInputRow: { flexDirection: 'row', alignItems: 'center', width: '100%' },
   manualInput: { flex: 1, backgroundColor: theme.background, color: theme.text, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: theme.border, fontSize: 15 },
-  // YENİ EKLE BUTONU STİLLERİ
-  manualBtn: { backgroundColor: theme.primary, paddingHorizontal: 16, height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  manualBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  
+  // STEPPER (ARTI EKSİ SEÇİCİ) STİLLERİ
+  stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingHorizontal: 6, height: 52, marginHorizontal: 8 },
+  stepperBtn: { backgroundColor: theme.primary, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  stepperText: { minWidth: 32, textAlign: 'center', fontSize: 15, fontWeight: 'bold' },
+
+  manualBtn: { backgroundColor: theme.primary, paddingHorizontal: 20, height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  manualBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
   closeModalBtn: { backgroundColor: theme.primary, paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 24 },
   closeModalBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
