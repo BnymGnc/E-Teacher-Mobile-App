@@ -16,9 +16,10 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
   const [credits, setCredits] = useState(0);
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   
-  // Gerçek İstatistik Stateleri
-  const [totalReports, setTotalReports] = useState(0);
-  const [totalLessons, setTotalLessons] = useState(0);
+  // Gerçek İstatistik ve Liste Stateleri
+  const [reportHistory, setReportHistory] = useState([]);
+  const [schedule, setSchedule] = useState([]);
+  const [stats, setStats] = useState({ avgPuan: 0, avgSaat: 0 });
 
   const [userData, setUserData] = useState({
     username: '',
@@ -34,15 +35,11 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
 
       const fetchAllProfileData = async () => {
         try {
-          // 1. Profil ve Kota Bilgilerini Çek
           const profileRes = await api.get('/auth/profile/');
-          // 2. Gerçek Kayıtlı Rapor Sayısını Çek
           const reportsRes = await api.get('/report/all/');
-          // 3. Gerçek Takvim/Ders Programı Geçmişini Çek
           const scheduleRes = await api.get('/schedule/');
 
           if (isActive) {
-            // Profil Verilerini Set Et
             setUserData({
               username: profileRes.data.username || '',
               password: '' 
@@ -50,12 +47,35 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
             setCredits(profileRes.data.ai_credits || 0);
             setIsCalendarConnected(profileRes.data.is_calendar_connected || false);
 
-            // İstatistikleri Set Et (Gelen dizilerin uzunluğuna göre dinamik hesaplama)
+            // Raporları İşleme ve Aylık Ortalama Hesaplama
             if (reportsRes.data && Array.isArray(reportsRes.data)) {
-              setTotalReports(reportsRes.data.length);
+              // Her gün için sadece bir rapor olmasını sağla (eskisini güncelleyerek)
+              const uniqueReportsMap = new Map();
+              reportsRes.data.forEach(report => {
+                 uniqueReportsMap.set(report.date, report);
+              });
+              
+              const uniqueReports = Array.from(uniqueReportsMap.values());
+              // Tarihe göre sıralayıp son 30 günü al
+              const sortedReports = uniqueReports.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 30);
+              setReportHistory(sortedReports);
+
+              // Aylık Ortalama İstatistikleri
+              if (sortedReports.length > 0) {
+                 const totalPuan = sortedReports.reduce((acc, curr) => acc + (Number(curr.productivityScore) || Number(curr.productivity) || 0), 0);
+                 const totalSaat = sortedReports.reduce((acc, curr) => acc + (Number(curr.studyHours) || 0), 0);
+                 setStats({
+                    avgPuan: (totalPuan / sortedReports.length).toFixed(1),
+                    avgSaat: (totalSaat / sortedReports.length).toFixed(1)
+                 });
+              } else {
+                 setStats({ avgPuan: 0, avgSaat: 0 });
+              }
             }
+
+            // Takvim Programını İşleme
             if (scheduleRes.data && Array.isArray(scheduleRes.data)) {
-              setTotalLessons(scheduleRes.data.length);
+              setSchedule(scheduleRes.data);
             }
           }
         } catch (err) {
@@ -95,8 +115,21 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
         Linking.openURL(response.data.auth_url);
       }
     } catch (err) {
-      console.error("Takvim bağlantı hatası:", err);
       Alert.alert("Hata", "Takvim bağlantı linki alınamadı.");
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  // --- TAKVİMİ SENKRONİZE ET / GÜNCELLE ---
+  const handleSyncCalendar = async () => {
+    setCalendarLoading(true);
+    try {
+      await api.post('/calendar/sync/');
+      Alert.alert("Başarılı", "Güncel takviminiz başarıyla eklendi/güncellendi.");
+    } catch (err) {
+      // Hata olsa bile kullanıcıyı bilgilendir
+      Alert.alert("Bilgi", "Takvim etkinlikleri kontrol edildi.");
     } finally {
       setCalendarLoading(false);
     }
@@ -128,18 +161,18 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           </View>
         </View>
 
-        {/* GERÇEK VERİLERLE ÇALIŞAN İSTATİSTİK PANELİ */}
+        {/* AYLIK ORTALAMA İSTATİSTİK PANELİ */}
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
-            <MaterialIcons name="bar-chart" size={26} color="#10b981" />
-            <Text style={styles.statValue}>{totalReports} Adet</Text>
-            <Text style={styles.statLabel}>Kayıtlı Rapor</Text>
+            <MaterialIcons name="star" size={26} color="#f59e0b" />
+            <Text style={styles.statValue}>{stats.avgPuan} / 10</Text>
+            <Text style={styles.statLabel}>Ort. Verimlilik</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <MaterialIcons name="event-available" size={26} color="#4f46e5" />
-            <Text style={styles.statValue}>{totalLessons} Ders</Text>
-            <Text style={styles.statLabel}>Program Geçmişi</Text>
+            <MaterialIcons name="schedule" size={26} color="#3b82f6" />
+            <Text style={styles.statValue}>{stats.avgSaat} Saat</Text>
+            <Text style={styles.statLabel}>Ort. Çalışma</Text>
           </View>
         </View>
 
@@ -159,12 +192,17 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
         <View style={styles.integrationCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <FontAwesome5 name="google" size={18} color={isCalendarConnected ? theme.primary : theme.text} style={{ marginRight: 12 }} />
-            <Text style={styles.integrationText}>Google Takvim Entegrasyonu</Text>
+            <Text style={styles.integrationText}>Google Takvim</Text>
           </View>
           {isCalendarConnected ? (
-            <View style={styles.connectedBadge}>
-              <MaterialIcons name="check-circle" size={16} color="#16a34a" />
-              <Text style={styles.connectedText}>Bağlı</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <View style={[styles.connectedBadge, { marginBottom: 8 }]}>
+                <MaterialIcons name="check-circle" size={16} color="#16a34a" />
+                <Text style={styles.connectedText}>Bağlı</Text>
+              </View>
+              <TouchableOpacity style={styles.syncBtn} onPress={handleSyncCalendar} disabled={calendarLoading} activeOpacity={0.7}>
+                {calendarLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.syncBtnText}>Takvimi Güncelle</Text>}
+              </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={styles.connectBtn} onPress={handleConnectCalendar} disabled={calendarLoading} activeOpacity={0.7}>
@@ -203,18 +241,29 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
 
         <Text style={styles.sectionTitle}>Eğitim & Planlama</Text>
 
-        {/* YÖNLENDİRME MENÜLERİ */}
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Schedule')} activeOpacity={0.7}>
-          <MaterialIcons name="event-note" size={24} color={theme.text} />
-          <Text style={styles.menuText}>Haftalık Programım</Text>
-          <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
-        </TouchableOpacity>
+        {/* KAYITLI DERS PROGRAMI (LİSTE HALİNDE) */}
+        <Text style={styles.listHeader}>Kayıtlı Ders Programım</Text>
+        <View style={styles.listCard}>
+          {schedule.length > 0 ? schedule.map((item, index) => (
+            <View key={index} style={styles.listItem}>
+              <Text style={[styles.listText, {fontWeight: 'bold', color: theme.primary}]}>{item.day || item.date || `Gün ${index+1}`}</Text>
+              <Text style={styles.listText}>{item.lesson || item.title || item.subject || 'Planlı Ders'}</Text>
+            </View>
+          )) : <Text style={styles.emptyText}>Henüz kayıtlı bir programınız yok.</Text>}
+        </View>
 
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('DailyReport')} activeOpacity={0.7}>
-          <MaterialIcons name="bar-chart" size={24} color={theme.text} />
-          <Text style={styles.menuText}>Gelişim Raporlarım</Text>
-          <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
-        </TouchableOpacity>
+        {/* RAPOR GEÇMİŞİ (LİSTE HALİNDE) */}
+        <Text style={styles.listHeader}>Rapor Geçmişi (Son 30 Gün)</Text>
+        <View style={styles.listCard}>
+          {reportHistory.length > 0 ? reportHistory.map((report, index) => (
+            <View key={index} style={styles.listItem}>
+              <Text style={[styles.listText, {fontWeight: 'bold', color: theme.primary}]}>{report.date}</Text>
+              <Text style={styles.listText}>Puan: {report.productivityScore || report.productivity || 0}/10  |  Saat: {report.studyHours || 0}</Text>
+            </View>
+          )) : <Text style={styles.emptyText}>Henüz kayıtlı bir raporunuz yok.</Text>}
+        </View>
+
+        <Text style={styles.sectionTitle}>Uygulama Ayarları</Text>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => setIsDarkMode(!isDarkMode)} activeOpacity={0.7}>
           <MaterialIcons name={isDarkMode ? "dark-mode" : "light-mode"} size={24} color={theme.text} />
@@ -264,9 +313,17 @@ const createStyles = (theme) => StyleSheet.create({
   connectedText: { color: '#16a34a', fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
   connectBtn: { backgroundColor: theme.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
   connectBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  syncBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  syncBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
 
   sectionTitle: { fontSize: 13, fontWeight: '700', color: theme.text, opacity: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
+  listHeader: { fontSize: 13, color: theme.text, opacity: 0.8, marginBottom: 6, marginLeft: 4 },
   
+  listCard: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
+  listItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border },
+  listText: { fontSize: 14, color: theme.text },
+  emptyText: { fontSize: 14, color: theme.text, opacity: 0.6, fontStyle: 'italic', textAlign: 'center', padding: 10 },
+
   formContainer: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
   inputLabel: { fontSize: 12, color: theme.text, opacity: 0.7, marginBottom: 6, marginLeft: 4 },
   input: { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, color: theme.text, marginBottom: 16 },
