@@ -285,6 +285,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
   // 7. BACKEND KAYIT (PROFİL EKRANI İÇİN ÖZEL DÖNÜŞÜM İLE)
   const handleSaveToBackend = async () => {
+    // Eksik ders kontrolü (Web örneğindeki mantıkla aynı)
     const assignedLessons = new Set();
     DAYS.forEach(day => {
       HOURS.forEach(hour => {
@@ -297,21 +298,20 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     const unassigned = lessonPool.filter(lesson => !assignedLessons.has(lesson.name));
     if (unassigned.length > 0) {
       const names = unassigned.map(l => l.name).join(', ');
-      Alert.alert(
-        'Eksik Ders Yerleşimi',
-        `Havuza eklediğiniz tüm dersleri takvime yerleştirmeniz zorunludur.\n\nYerleşmeyenler: ${names}`
-      );
+      Alert.alert('Eksik Ders Yerleşimi', `Ders havuzundaki şu dersleri yerleştirmeniz zorunludur: ${names}`);
       return;
     }
 
     setLoading(true);
     try {
+      // PROFİL EKRANI İÇİN DİZİ FORMATINDA VERİ GÖNDERİYORUZ
       const flatSchedule = [];
       DAYS.forEach(d => {
          HOURS.forEach(h => {
              if(weeklyPlan[d][h].lessonName) {
                  flatSchedule.push({
-                     day: `${d} (${h})`,
+                     day: d,
+                     hour: h,
                      lesson: weeklyPlan[d][h].lessonName
                  });
              }
@@ -321,13 +321,13 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
       await api.post('/schedule/', { 
         plan: weeklyPlan, 
         pool: lessonPool,
-        schedule: flatSchedule 
+        schedule: flatSchedule // Profil ekranı bunu dizi olarak okuyacak
       });
       
       setHasUnsavedChanges(false);
-      Alert.alert('Başarılı', 'Haftalık çalışma planınız sisteme başarıyla kaydedildi.');
+      Alert.alert('Başarılı', 'Haftalık çalışma planınız kaydedildi.');
     } catch (err) {
-      Alert.alert('Hata', 'Kaydedilirken bulut sunucu bağlantısında bir sorun oluştu.');
+      Alert.alert('Hata', 'Kaydedilirken bir hata oluştu.');
     } finally {
       setLoading(false);
     }
