@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../api';
@@ -22,19 +22,18 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
     setError(null);
     
     try {
-      // Backend JWT token isteği
+      // Django JWT TokenObtainPairView email'i 'username' alanında bekler
       const response = await api.post('/auth/login/', { 
-        username: email, // Django email'i username alanında bekler
+        username: email, 
         password: password 
       });
 
       await AsyncStorage.setItem('access_token', response.data.access);
       await AsyncStorage.setItem('refresh_token', response.data.refresh);
       
-      // Başarılı girişte doğrudan uygulamaya yönlendir
       navigation.replace('MainApp');
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Giriş yapılamadı. E-posta veya şifreniz hatalı.';
+      const msg = err.response?.data?.detail || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -43,7 +42,7 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
           <MaterialIcons name={isDarkMode ? "brightness-7" : "brightness-4"} size={28} color={theme.primary} />
         </TouchableOpacity>
@@ -61,10 +60,7 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
             placeholder="E-Posta"
             placeholderTextColor={theme.textSecondary}
             value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              if (error) setError(null);
-            }}
+            onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
           />
@@ -74,15 +70,12 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
             placeholderTextColor={theme.textSecondary}
             secureTextEntry
             value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              if (error) setError(null);
-            }}
+            onChangeText={setPassword}
           />
 
           {error && (
             <View style={styles.errorBox}>
-              <MaterialIcons name="error-outline" size={20} color="#ef4444" />
+              <MaterialIcons name="error-outline" size={20} color="#d32f2f" />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
@@ -92,12 +85,12 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.infoAlert, { backgroundColor: isDarkMode ? '#1e1b4b' : '#e0e7ff', borderColor: theme.primary + '40' }]}>
+        <View style={[styles.infoAlert, { backgroundColor: isDarkMode ? '#1a237e33' : '#e3f2fd', borderColor: theme.primary + '40' }]}>
           <MaterialIcons name="info-outline" size={24} color={theme.primary} />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={[styles.infoTitle, { color: theme.text }]}>Önemli Bilgilendirme</Text>
             <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-              Sistemimiz ücretsiz sunucularda barındırıldığı için, uygulamanın ilk uyanması 30-50 saniye sürebilir.
+              Sistemimiz ücretsiz sunucularda barındırıldığı için, uyanması 30-50 saniye sürebilir.
             </Text>
           </View>
         </View>
@@ -123,8 +116,8 @@ const styles = StyleSheet.create({
   form: { width: '100%' },
   label: { fontSize: 18, marginBottom: 20, textAlign: 'center', fontWeight: '500' },
   input: { padding: 18, borderRadius: 14, borderWidth: 1, marginBottom: 16, fontSize: 16 },
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2', padding: 14, borderRadius: 10, marginBottom: 16, borderWidth: 1, borderColor: '#fecaca' },
-  errorText: { color: '#ef4444', marginLeft: 10, fontSize: 14, flex: 1, fontWeight: '500' },
+  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffebee', padding: 14, borderRadius: 10, marginBottom: 16 },
+  errorText: { color: '#d32f2f', marginLeft: 10, fontSize: 14, flex: 1 },
   loginButton: { padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 10, elevation: 3 },
   loginButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   infoAlert: { flexDirection: 'row', padding: 16, borderRadius: 14, marginTop: 32, borderWidth: 1 },
