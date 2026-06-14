@@ -16,10 +16,9 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
   const [error, setError] = useState(null);
   const [result, setResult] = useState('');
 
-  // Ders Şablonları
   const [subjects, setSubjects] = useState([]);
 
-  // Web mantığı: Sınav veya Alan değiştiğinde dersleri güncelle
+  // Sınav türüne göre dersleri getir
   useEffect(() => {
     if (examType === 'TYT') {
       setSubjects([
@@ -43,7 +42,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
           { name: 'Coğrafya', dogru: '', wrong: '', blank: '' },
           { name: 'Felsefe / Din', dogru: '', wrong: '', blank: '' },
         ]);
-      } else { // Eşit Ağırlık
+      } else { 
         setSubjects([
           { name: 'Matematik', dogru: '', wrong: '', blank: '' },
           { name: 'Edebiyat', dogru: '', wrong: '', blank: '' },
@@ -54,7 +53,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
     }
   }, [examType, aytTrack]);
 
-  // Web Mantığı: Her dersin maksimum soru sınırı
+  // Her dersin maksimum soru sınırı
   const getSubjectLimit = (name) => {
     if (examType === 'AYT') {
       if (aytTrack === 'Sayısal') {
@@ -74,14 +73,12 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
       if (name === 'Coğrafya-1') return 6;
       return 40;
     }
-    // TYT Sınırları
-    if (name === 'Türkçe' || name === 'Matematik') return 40;
-    return 20; 
+    return (name === 'Türkçe' || name === 'Matematik') ? 40 : 20; 
   };
 
-  // Web Mantığı: Doğru/Yanlış/Boş girilirken limiti aşmayı engelleyen zeki koruma
+  // Girilen sayıları kontrol et ve maksimum sınırı aşmasını engelle
   const updateSubject = (idx, field, value) => {
-    let cleanVal = value.replace(/[^0-9]/g, ''); // Sadece rakam kabul et
+    let cleanVal = value.replace(/[^0-9]/g, ''); 
 
     setSubjects(prev => prev.map((s, i) => {
       if (i !== idx) return s;
@@ -93,16 +90,14 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
       let y = field === 'wrong' ? numVal : Number(s.wrong || 0);
       let b = field === 'blank' ? numVal : Number(s.blank || 0);
 
-      // Toplamları limiti geçiyorsa değişikliği iptal et
-      if (d + y + b > limit) {
-        return s; 
-      }
+      // Toplam sınırı geçiyorsa reddet
+      if (d + y + b > limit) return s; 
       
       return { ...s, [field]: cleanVal };
     }));
   };
 
-  // Anlık Net Hesaplamaları
+  // Anlık Net Hesaplama
   const computedNets = subjects.map(s => {
     const d = Number(s.dogru || 0);
     const y = Number(s.wrong || 0);
@@ -112,7 +107,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
 
   const totalNet = computedNets.reduce((sum, s) => sum + s.net, 0);
 
-  // Analizi Backend'e Gönder
+  // NETLERİ DİREKT API İLE YAPAY ZEKAYA (BACKENDE) GÖNDER
   const handleAnalyze = async () => {
     setLoading(true);
     setError(null);
@@ -120,15 +115,19 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
     Keyboard.dismiss();
 
     try {
-      const response = await api.post('/ml/exam-analysis/', {
+      // Backend'e sadece gerekenler ve netler gidiyor.
+      const payload = {
         examType: examType,
         goals: goals,
-        subjects: computedNets // Sadece hesaplanan netleri gönderiyoruz
-      });
+        subjects: computedNets // Örn: [{ name: "Türkçe", net: 35.5 }, ...]
+      };
 
-      setResult(response.data.analysis);
+      const response = await api.post('/ml/exam-analysis/', payload);
+
+      // Gelen yanıtı olduğu gibi basıyoruz
+      setResult(response.data.analysis || response.data.result || response.data.reply || response.data);
     } catch (err) {
-      setError('Analiz yapılırken bir hata oluştu. Sunucu bağlantınızı kontrol edin.');
+      setError('Yapay Zeka API bağlantısında bir hata oluştu. Backend endpointinizi kontrol edin.');
     } finally {
       setLoading(false);
     }
@@ -137,7 +136,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       
-      {/* Üst App Bar (Klavyeden etkilenmez) */}
+      {/* Sabit Üst Bar */}
       <View style={styles.appBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.6}>
           <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
@@ -146,11 +145,10 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
         <View style={styles.placeholderBtn} />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : null} style={{ flex: 1 }}>
         <ScrollView 
-          style={{ flex: 1 }} 
-          showsVerticalScrollIndicator={false} 
           contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
         >
           
@@ -159,12 +157,12 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             <Text style={styles.mainTitle}>Netlerini Öğren, {"\n"}Yapay Zeka Yorumlasın</Text>
           </View>
 
-          {/* Sınav Türü Seçici (TYT / AYT) */}
+          {/* Sınav Türü Seçici */}
           <View style={styles.segmentedControl}>
             {['TYT', 'AYT'].map(type => (
               <TouchableOpacity 
                 key={type} 
-                style={[styles.segmentBtn, examType === type && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                style={[styles.segmentBtn, examType === type && { backgroundColor: theme.primary }]}
                 onPress={() => setExamType(type)}
                 activeOpacity={0.8}
               >
@@ -173,13 +171,13 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             ))}
           </View>
 
-          {/* AYT İse Alan Seçici */}
+          {/* AYT Alan Seçici */}
           {examType === 'AYT' && (
-            <View style={[styles.segmentedControl, { marginTop: 10 }]}>
+            <View style={[styles.segmentedControl, { marginTop: 12 }]}>
               {['Sayısal', 'Eşit Ağırlık', 'Sözel'].map(track => (
                 <TouchableOpacity 
                   key={track} 
-                  style={[styles.segmentBtn, aytTrack === track && { backgroundColor: theme.text, borderColor: theme.text }]}
+                  style={[styles.segmentBtn, aytTrack === track && { backgroundColor: theme.text }]}
                   onPress={() => setAytTrack(track)}
                   activeOpacity={0.8}
                 >
@@ -189,12 +187,11 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             </View>
           )}
 
-          {/* Derslerin D, Y, B Giriş Kartları */}
+          {/* MOBİLE ÖZEL YENİ KART TASARIMI */}
           <View style={styles.subjectsContainer}>
             {subjects.map((s, idx) => (
               <View key={idx} style={styles.subjectCard}>
                 
-                {/* Kart Üst Bilgi */}
                 <View style={styles.subjectCardHeader}>
                   <View>
                     <Text style={styles.subjectName}>{s.name}</Text>
@@ -205,7 +202,6 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
                   </View>
                 </View>
 
-                {/* D Y B Girdileri */}
                 <View style={styles.inputRow}>
                   <View style={styles.inputBox}>
                     <Text style={styles.inputLabel}>Doğru</Text>
@@ -246,12 +242,11 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             <Text style={styles.totalNetValue}>{totalNet.toFixed(2)} NET</Text>
           </View>
 
-          {/* Kişisel Hedef Girişi */}
+          {/* Kişisel Hedef */}
           <Text style={styles.goalsLabel}>Kişisel Hedefiniz / Notunuz (Opsiyonel)</Text>
           <TextInput
             style={styles.goalsInput}
             multiline
-            minRows={2}
             placeholder="Örn: Süre yetiştiremedim, fende zorlandım..."
             placeholderTextColor={theme.textSecondary}
             value={goals}
@@ -266,27 +261,26 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             </View>
           )}
 
-          {/* Analiz Butonu */}
           <TouchableOpacity style={styles.actionBtn} onPress={handleAnalyze} disabled={loading} activeOpacity={0.8}>
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <View style={styles.btnInner}>
                 <MaterialIcons name="auto-awesome" size={22} color="#fff" />
-                <Text style={styles.actionBtnText}>Yapay Zeka ile Analiz Et</Text>
+                <Text style={styles.actionBtnText}>API Üzerinden Yapay Zeka'ya Sor</Text>
               </View>
             )}
           </TouchableOpacity>
 
-          {/* Yapay Zeka Sonuç Çıktısı */}
+          {/* API'den Dönen Sonuç */}
           {result !== '' && (
             <View style={styles.resultBox}>
               <View style={styles.resultHeader}>
                 <MaterialIcons name="insights" size={24} color="#fff" />
-                <Text style={styles.resultTitle}>Analiz Sonucu</Text>
+                <Text style={styles.resultTitle}>Analiz Çıktısı</Text>
               </View>
               <View style={styles.resultContent}>
-                <Text style={styles.resultText}>{result}</Text>
+                <Text style={styles.resultText}>{typeof result === 'string' ? result : JSON.stringify(result, null, 2)}</Text>
               </View>
             </View>
           )}
@@ -300,12 +294,12 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
 const createStyles = (theme, isDarkMode) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.background },
   appBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: Platform.OS === 'android' ? 76 : 64, paddingTop: Platform.OS === 'android' ? 24 : 0, backgroundColor: theme.surface, borderBottomWidth: 1, borderColor: theme.border },
-  backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', paddingLeft: 6 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
   placeholderBtn: { width: 44, height: 44 },
-  appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center' },
+  appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   
-  // Dev alt boşlukla rahat kaydırma sağlandı
-  scrollContent: { padding: 16, paddingBottom: 150 },
+  // Aşağı kaydırma sorunu için flexGrow ve yüksek alt boşluk
+  scrollContent: { flexGrow: 1, padding: 16, paddingBottom: 100 },
 
   headerInfo: { alignItems: 'center', marginBottom: 24, marginTop: 10 },
   mainTitle: { fontSize: 22, fontWeight: 'bold', color: theme.text, textAlign: 'center', marginTop: 12, lineHeight: 30 },
@@ -314,26 +308,26 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
   segmentText: { fontSize: 14, fontWeight: 'bold', color: theme.textSecondary },
 
-  subjectsContainer: { marginTop: 24, gap: 16 },
-  subjectCard: { backgroundColor: theme.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: theme.border, elevation: 1 },
+  subjectsContainer: { marginTop: 24 },
+  subjectCard: { backgroundColor: theme.surface, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
   subjectCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   subjectName: { fontSize: 16, fontWeight: 'bold', color: theme.text },
-  subjectLimit: { fontSize: 12, color: theme.textSecondary, marginTop: 2 },
+  subjectLimit: { fontSize: 12, color: theme.textSecondary, marginTop: 4 },
   
-  netChip: { backgroundColor: theme.primary + '20', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: theme.primary + '50' },
+  netChip: { backgroundColor: theme.primary + '15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: theme.primary + '40' },
   netChipText: { color: theme.primary, fontWeight: 'bold', fontSize: 14 },
 
   inputRow: { flexDirection: 'row', gap: 12 },
   inputBox: { flex: 1 },
-  inputLabel: { fontSize: 12, color: theme.textSecondary, textAlign: 'center', marginBottom: 6, fontWeight: '600' },
-  numberInput: { backgroundColor: theme.background, borderWidth: 1, borderRadius: 10, paddingVertical: 10, textAlign: 'center', fontSize: 16, fontWeight: 'bold' },
+  inputLabel: { fontSize: 13, color: theme.textSecondary, textAlign: 'center', marginBottom: 8, fontWeight: '600' },
+  numberInput: { backgroundColor: theme.background, borderWidth: 1, borderRadius: 12, paddingVertical: 12, textAlign: 'center', fontSize: 16, fontWeight: 'bold' },
 
-  totalNetBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5', padding: 20, borderRadius: 16, marginTop: 24, borderWidth: 1, borderColor: isDarkMode ? '#047857' : '#a7f3d0' },
+  totalNetBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5', padding: 20, borderRadius: 16, marginTop: 10, borderWidth: 1, borderColor: isDarkMode ? '#047857' : '#a7f3d0' },
   totalNetTitle: { fontSize: 16, fontWeight: 'bold', color: theme.text },
-  totalNetValue: { fontSize: 22, fontWeight: '900', color: isDarkMode ? '#34d399' : '#059669' },
+  totalNetValue: { fontSize: 24, fontWeight: '900', color: isDarkMode ? '#34d399' : '#059669' },
 
   goalsLabel: { fontSize: 14, fontWeight: 'bold', color: theme.text, marginTop: 24, marginBottom: 8, marginLeft: 4 },
-  goalsInput: { backgroundColor: theme.surface, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 16, fontSize: 15, minHeight: 80 },
+  goalsInput: { backgroundColor: theme.surface, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 16, fontSize: 15, minHeight: 100 },
 
   errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2', padding: 14, borderRadius: 12, marginTop: 16, borderWidth: 1, borderColor: '#fecaca' },
   errorText: { color: '#ef4444', marginLeft: 10, fontSize: 14, flex: 1, fontWeight: '500' },
