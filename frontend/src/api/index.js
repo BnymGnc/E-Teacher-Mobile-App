@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // YENİ IP ADRESİN BURADA!
-const BASE_URL = 'http://10.197.63.159:8000/api';
+const BASE_URL = 'https://e-teacher.onrender.com/api';
 
 const api = axios.create({
   baseURL: BASE_URL,

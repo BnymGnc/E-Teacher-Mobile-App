@@ -65,7 +65,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Render'da DATABASE_URL varsa onu kullanır, yoksa senin Neon linkini kullanır
 DATABASES = {
     'default': dj_database_url.config(
-        default='postgresql://neondb_owner:npg_Ww5zUK1TFaXh@ep-restless-math-an3zdlr6-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require',
+        default=os.environ.get('DATABASE_URL'),
         conn_max_age=600
     )
 }

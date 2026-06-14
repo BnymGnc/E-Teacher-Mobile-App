@@ -1,28 +1,20 @@
 # Product Requirements Document (PRD) - E-Teacher Mobil
 
 ## 1. Vizyon
-Öğrencilerin sınav yolculuğunda yanlarında taşıyabilecekleri, kişiselleştirilmiş bir yapay zeka rehberi ve kesintisiz canlı ders platformu sunmak.
+Öğrencilerin sınav yolculuğunda yanlarında taşıyabilecekleri, kişiselleştirilmiş bir yapay zeka rehberi ve etkileşimli eğitim platformu sunmak.
 
-## 2. Teknik Mimari
-* **Backend:** Django REST Framework (Python).
-* **Veritabanı:** PostgreSQL (Neon DB).
-* **Machine Learning:** Sınav analizi, hedef net tahminleme ve AI Chatbot modülleri.
-* **Frontend (Mobil):** React Native / Flutter (Cross-platform).
+## 2. Problem ve Hedef Kitle
+**Problem:** YKS'ye hazırlanan öğrenciler, kişisel seviyelerine uygun program hazırlamakta, sınav stresiyle başa çıkmakta ve hedefledikleri üniversitenin güncel analizlerine anında ulaşmakta zorlanmaktadır.
+**Hedef Kitle:** Sınav stresi yaşayan, çalışma verimini artırmak isteyen lise öğrencileri ve mezunlar.
 
 ## 3. Kullanıcı Hikayeleri ve Kabul Kriterleri (User Stories)
-
-### Modül: AI Psikolojik Destek
-* **US01:** Bir öğrenci olarak stresli hissettiğimde AI asistan ile konuşabilmeliyim.
-  * *Kriter:* Mesaj iletimi hızlı olmalı ve konuşma geçmişi backend üzerinde saklanmalıdır.
-
-### Modül: Canlı Dersler
-* **US02:** Bir öğrenci olarak yaklaşan dersimi görüp telefondan Meet odasına girebilmeliyim.
-  * *Kriter:* "Derse Katıl" butonu sadece ders saati geldiğinde aktifleşmelidir.
-
-### Modül: ML Sınav Analizi
-* **US03:** Bir öğrenci olarak deneme sonuçlarımı girdiğimde hedefime ne kadar yaklaştığımı görmeliyim.
-  * *Kriter:* Veriler backend'deki ML modelinden çekilip görsel grafiklerle sunulmalıdır.
+* **US01 (AI Psikolojik Destek):** Bir öğrenci olarak stresli hissettiğimde AI asistan ile konuşabilmeliyim.
+  * *Kriter:* LLM modeli öğrencinin duygu durumunu analiz edip motive edici yanıtlar üretmeli ve konuşma geçmişi backend'de saklanmalıdır.
+* **US02 (Canlı Dersler ve Takvim):** Bir öğrenci olarak yaklaşan dersimi veya planımı görüp anında organize olabilmeliyim.
+  * *Kriter:* Takvim ekranı dinamik olmalı, API üzerinden günlük veriler çekilmelidir.
+* **US03 (ML Sınav Analizi ve Hedef Net):** Bir öğrenci olarak hedeflediğim bölümün YÖK Atlas verilerini ve ulaşmam gereken netleri sistemde görebilmeliyim.
+  * *Kriter:* Veriler backend'den çekilip mobil uyumlu, okunabilir grafikler/çipler halinde sunulmalıdır.
 
 ## 4. Başarı Ölçütleri (KPIs)
-* **Kullanım:** Aktif kullanıcıların %50'sinin AI modüllerini haftada en az 3 kez kullanması.
-* **Performans:** Uygulama açılış süresinin 3 saniyenin altında kalması.
+* **Kullanım:** Aktif kullanıcıların %50'sinin AI Chat modülünü haftada en az 3 kez kullanması.
+* **Performans:** Mobil uygulamanın açılış ve AI yanıt süresinin 3 saniyenin altında kalması.
