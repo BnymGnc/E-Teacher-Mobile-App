@@ -164,7 +164,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   const handleSaveToBackend = async () => {
     setLoading(true);
     try {
-      await api.post('/calendar/save-weekly-plan/', { plan: weeklyPlan, pool: lessonPool });
+      await api.post('/api/schedule/', { plan: weeklyPlan, pool: lessonPool });
       setHasUnsavedChanges(false);
       Alert.alert('Başarılı', 'Haftalık programınız sisteme kaydedildi.');
     } catch (err) {
