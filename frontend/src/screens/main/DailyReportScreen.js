@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Keyboard } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native'; // Odaklanmayı dinlemek için eklendi
 import api from '../../api';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
@@ -25,22 +26,38 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
   const dayName = days[today.getDay()];
   const formattedDate = today.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
 
-  // SAYFA YÜKLENDİĞİNDE BUGÜNÜN RAPORU VARSA ÇEK
-  useEffect(() => {
-    const fetchTodayReport = async () => {
-      try {
-        const response = await api.get(`/report/${currentDate}/`);
-        if (response.data && (response.data.productivity || response.data.productivityScore)) {
-          setHours(response.data.studyHours?.toString() || '');
-          setProductivity((response.data.productivityScore || response.data.productivity)?.toString() || '');
-          setMessage(response.data.dailyNotes || response.data.report || '');
+  // SAYFAYA HER GİRİLDİĞİNDE BUGÜNÜN RAPORUNU ÇEK (useFocusEffect ile güncellendi)
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const fetchTodayReport = async () => {
+        try {
+          const response = await api.get(`/report/${currentDate}/`);
+          if (isActive && response.data && (response.data.productivity || response.data.productivityScore)) {
+            setHours(response.data.studyHours?.toString() || '');
+            setProductivity((response.data.productivityScore || response.data.productivity)?.toString() || '');
+            setMessage(response.data.dailyNotes || response.data.report || '');
+            
+            // Eğer daha önceden AI raporu üretilip kaydedildiyse onu da getir
+            if (response.data.ai_feedback) {
+                setAiReport(response.data.ai_feedback);
+            } else {
+                setAiReport(''); // Yeni günse temizle
+            }
+          }
+        } catch (err) {
+          console.log("Bugünün raporu çekilemedi veya henüz oluşturulmadı.");
         }
-      } catch (err) {
-        console.log("Bugünün raporu çekilemedi veya henüz oluşturulmadı.");
-      }
-    };
-    fetchTodayReport();
-  }, [currentDate]);
+      };
+
+      fetchTodayReport();
+
+      return () => {
+        isActive = false; // Component unmount olursa memory leak önle
+      };
+    }, [currentDate])
+  );
 
   // AI ANALİZİ OLUŞTURMA
   const handleGenerateAI = async () => {
@@ -91,7 +108,8 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
         date: currentDate, 
         dailyNotes: message, 
         productivityScore: Number(productivity),
-        studyHours: Number(hours)
+        studyHours: Number(hours),
+        ai_feedback: aiReport // Üretilen raporu da veritabanına yolluyoruz (Backend destekliyorsa)
       });
 
       setSuccess('Günlük çalışma raporu başarıyla veritabanına kaydedildi!');

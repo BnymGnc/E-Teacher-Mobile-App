@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native'; // ANLIK YENİLEME İÇİN EKLENDİ
 import { lightTheme, darkTheme } from '../../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../api'; // Kendi api dosyanın yoluna göre düzelt
+import api from '../../api'; 
 
 export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode }) {
   const theme = isDarkMode ? darkTheme : lightTheme;
@@ -20,26 +21,36 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
     password: ''
   });
 
-  const MAX_CREDITS = 20; // Web'deki sınırımız
+  const MAX_CREDITS = 20;
 
-  // --- VERİLERİ ÇEKME (Sayfa Açıldığında) ---
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  // --- VERİLERİ ÇEKME (SAYFAYA HER ODAKLANILDIĞINDA ÇALIŞIR) ---
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true; // Sayfa değiştirilirse isteği iptal etmek için
 
-  const fetchProfile = async () => {
-    try {
-      const response = await api.get('/auth/profile/');
-      setUserData({
-        username: response.data.username || '',
-        password: '' // Şifreyi güvenlik gereği boş bırakıyoruz
-      });
-      setCredits(response.data.ai_credits || 0);
-      setIsCalendarConnected(response.data.is_calendar_connected || false);
-    } catch (err) {
-      console.error("Profil çekme hatası:", err);
-    }
-  };
+      const fetchProfile = async () => {
+        try {
+          const response = await api.get('/auth/profile/');
+          if (isActive) {
+            setUserData({
+              username: response.data.username || '',
+              password: '' 
+            });
+            setCredits(response.data.ai_credits || 0);
+            setIsCalendarConnected(response.data.is_calendar_connected || false);
+          }
+        } catch (err) {
+          console.error("Profil çekme hatası:", err);
+        }
+      };
+
+      fetchProfile();
+
+      return () => {
+        isActive = false; // Temizlik (Cleanup) işlemi
+      };
+    }, [])
+  );
 
   // --- PROFİL GÜNCELLEME ---
   const handleUpdate = async () => {
@@ -47,8 +58,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
     try {
       await api.put('/auth/profile/', userData);
       Alert.alert("Başarılı", "Profilin başarıyla güncellendi!");
-      setUserData(prev => ({ ...prev, password: '' })); // Şifre alanını temizle
-      fetchProfile(); // Verileri yenile
+      setUserData(prev => ({ ...prev, password: '' })); 
     } catch (err) {
       const serverError = err.response?.data?.error || 'Profil güncellenirken bir hata oluştu.';
       Alert.alert("Hata", serverError);
@@ -63,7 +73,6 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
     try {
       const response = await api.get('/calendar/auth/');
       if (response.data && response.data.auth_url) {
-        // Mobilde tarayıcıyı açmak için Linking kullanılır
         Linking.openURL(response.data.auth_url);
       }
     } catch (err) {
@@ -87,7 +96,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
         <Text style={styles.headerTitle}>Öğrenci Profili</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
         {/* PROFİL BAŞLIĞI */}
         <View style={styles.profileHeaderCard}>
@@ -124,7 +133,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
               <Text style={styles.connectedText}>Bağlı</Text>
             </View>
           ) : (
-            <TouchableOpacity style={styles.connectBtn} onPress={handleConnectCalendar} disabled={calendarLoading}>
+            <TouchableOpacity style={styles.connectBtn} onPress={handleConnectCalendar} disabled={calendarLoading} activeOpacity={0.7}>
               {calendarLoading ? <ActivityIndicator size="small" color={theme.surface} /> : <Text style={styles.connectBtnText}>Bağla</Text>}
             </TouchableOpacity>
           )}
@@ -140,6 +149,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
             value={userData.username}
             onChangeText={(text) => setUserData({...userData, username: text})}
             placeholderTextColor={theme.text + '50'}
+            autoCapitalize="none"
           />
 
           <Text style={styles.inputLabel}>Yeni Şifre (Boş bırakılabilir)</Text>
@@ -152,34 +162,35 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
             secureTextEntry
           />
 
-          <TouchableOpacity style={styles.updateBtn} onPress={handleUpdate} disabled={loading}>
+          <TouchableOpacity style={styles.updateBtn} onPress={handleUpdate} disabled={loading} activeOpacity={0.8}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.updateBtnText}>Bilgilerimi Güncelle</Text>}
           </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionTitle}>Eğitim & Uygulama</Text>
 
-        {/* YÖNLENDİRME MENÜLERİ */}
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Schedule')}>
+        {/* YÖNLENDİRME MENÜLERİ (ACTIVE OPACITY EKLENDİ) */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Schedule')} activeOpacity={0.7}>
           <MaterialIcons name="event-note" size={24} color={theme.text} />
           <Text style={styles.menuText}>Haftalık Programım</Text>
           <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Reports')}>
+        {/* DİKKAT: Rota adı DailyReport olarak güncellendi! */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('DailyReport')} activeOpacity={0.7}>
           <MaterialIcons name="bar-chart" size={24} color={theme.text} />
           <Text style={styles.menuText}>Gelişim Raporlarım</Text>
           <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={() => setIsDarkMode(!isDarkMode)}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => setIsDarkMode(!isDarkMode)} activeOpacity={0.7}>
           <MaterialIcons name={isDarkMode ? "dark-mode" : "light-mode"} size={24} color={theme.text} />
           <Text style={styles.menuText}>Tema Görünümü ({isDarkMode ? "Karanlık" : "Aydınlık"})</Text>
           <MaterialIcons name="sync" size={20} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
         {/* ÇIKIŞ YAP */}
-        <TouchableOpacity style={[styles.menuItem, styles.logoutBtn]} onPress={handleLogout}>
+        <TouchableOpacity style={[styles.menuItem, styles.logoutBtn]} onPress={handleLogout} activeOpacity={0.7}>
           <MaterialIcons name="logout" size={24} color="#ef4444" />
           <Text style={[styles.menuText, { color: '#ef4444' }]}>Hesaptan Çıkış Yap</Text>
         </TouchableOpacity>
