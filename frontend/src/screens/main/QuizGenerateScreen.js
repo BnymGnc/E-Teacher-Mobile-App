@@ -32,7 +32,7 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
 
     try {
       // Backend'deki ML test üretme endpoint'ine istek atılıyor
-      const response = await api.post('/ml/generate-quiz/', { 
+      const response = await api.post('/quiz-generate/', { 
         topic: topic,
         difficulty: difficulty,
         count: questionCount
