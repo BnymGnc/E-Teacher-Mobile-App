@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, TextInput, Alert, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import api from '../../api';
@@ -33,23 +33,20 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   
-  // Havuz Yönetimi Modalı
   const [poolManageModalVisible, setPoolManageModalVisible] = useState(false);
   const [newLessonName, setNewLessonName] = useState('');
-  const [newLessonHours, setNewLessonHours] = useState('1'); // Stepper başlangıcı
+  const [newLessonHours, setNewLessonHours] = useState('1'); 
 
-  // Ders Seçim Modalı
   const [lessonModalVisible, setLessonModalVisible] = useState(false);
   const [selectedHourForLesson, setSelectedHourForLesson] = useState(null);
   const [manualLessonInput, setManualLessonInput] = useState('');
 
-  // 1. KAYITLI PROGRAMI VE HAVUZU BACKENDDEN ÇEKME
+  // 1. KAYITLI PROGRAMI BACKENDDEN ÇEK
   useEffect(() => {
     const loadSavedSchedule = async () => {
       try {
         const res = await api.get('/schedule/');
         if (res.data) {
-          // Gelen veri formatına göre esnek eşleştirme yapılıyor
           if (res.data.plan && res.data.pool) {
             setWeeklyPlan(res.data.plan);
             setLessonPool(res.data.pool);
@@ -59,7 +56,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
           }
         }
       } catch (err) {
-        console.log("Kayıtlı takvim verisi bulunamadı veya ilk defa oluşturuluyor.");
+        console.log("Kayıtlı takvim bulunamadı, boş şablon açılıyor.");
       } finally {
         setInitialLoading(false);
       }
@@ -67,7 +64,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     loadSavedSchedule();
   }, []);
 
-  // 2. SAYFADAN ÇIKARKEN DEĞİŞİKLİK KONTROLÜ VE UYARI
+  // 2. ÇIKIŞ KORUMASI
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (!hasUnsavedChanges) return;
@@ -93,7 +90,6 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     const hours = parseInt(newLessonHours);
     if (isNaN(hours) || hours <= 0) return;
 
-    // Aynı isme sahip ders kontrolü
     if (lessonPool.some(l => l.name.toLowerCase() === newLessonName.trim().toLowerCase())) {
       Alert.alert('Uyarı', 'Bu ders zaten havuzunuzda mevcut.');
       return;
@@ -104,7 +100,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     
     setLessonPool([...lessonPool, newLesson]);
     setNewLessonName('');
-    setNewLessonHours('1'); // Reset
+    setNewLessonHours('1'); 
     setHasUnsavedChanges(true);
   };
 
@@ -113,7 +109,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setHasUnsavedChanges(true);
   };
 
-  // 4. SAAT MÜSAİTLİK DURUMU DEĞİŞTİRME
+  // 4. SAAT MÜSAİTLİK DURUMU
   const toggleAvailability = (hour) => {
     const currentStatus = weeklyPlan[selectedDay][hour].status;
     let nextStatus = 'available';
@@ -127,7 +123,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setHasUnsavedChanges(true);
   };
 
-  // 5. MANUEL VEYA HAVUZDAN DERS ATAMA İŞLEMLERİ
+  // 5. MANUEL DERS ATAMA
   const openLessonModal = (hour) => {
     if (weeklyPlan[selectedDay][hour].status === 'busy') {
       Alert.alert('Meşgul Zaman', 'Kırmızı işaretli zaman dilimlerine ders eklenemez. Önce müsaitlik durumunu değiştirin.');
@@ -175,7 +171,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setLessonModalVisible(false);
   };
 
-  // 6. DETAYLI AI DERS PROGRAMI ÖNERİ ALGORİTMASI
+  // 6. YENİ NESİL AI DAĞITIM (TÜM HAFTAYA DÖNGÜSEL YAYILIM)
   const handleAIGenerate = () => {
     if (lessonPool.length === 0) {
       Alert.alert('Uyarı', 'Lütfen önce ders havuzuna çalışmak istediğiniz dersleri ekleyin.');
@@ -199,86 +195,96 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
     const totalAvailable = greenSlots.length + yellowSlots.length;
 
-    // KAPASİTE YETERLİLİK UYARISI
     if (totalRequiredHours > totalAvailable) {
       setAiLoading(false);
-      Alert.alert('Kapasite Yetersiz', `Toplam ders saati hedefiniz ${totalRequiredHours} saat. Ancak takvimde boş olan toplam alan (Yeşil + Sarı) ${totalAvailable} saat. Lütfen müsait saatlerinizi artırın.`);
+      Alert.alert('Kapasite Yetersiz', `Dersleriniz ${totalRequiredHours} saat, ancak takvimde boş (Yeşil+Sarı) sadece ${totalAvailable} saat var. Müsaitliği artırın.`);
       return;
     }
 
     let newPlan = JSON.parse(JSON.stringify(weeklyPlan));
     let remainingLessons = JSON.parse(JSON.stringify(lessonPool));
 
-    const findAndPlace = (lesson, hoursToPlace, preferStatus) => {
+    let greenDayIdx = 0;
+    let yellowDayIdx = 0;
+
+    const placeLesson = (lesson, hoursToPlace, preferStatus, startDayIdx) => {
       let placed = 0;
-      while (placed < hoursToPlace) {
-         let chunk = (hoursToPlace - placed >= 2) ? 2 : 1;
-         let chunkPlaced = false;
+      let currentDayIdx = startDayIdx;
+      let attempts = 0;
 
-         // İstenen öncelikli alanda 2'şerli ardışık boşluk arama mantığı
-         if (chunk === 2) {
-           for (let d of DAYS) {
-             for (let i = 0; i < HOURS.length - 1; i++) {
-                let h1 = HOURS[i];
-                let h2 = HOURS[i+1];
-                if (newPlan[d][h1].status === preferStatus && !newPlan[d][h1].lessonName &&
-                    newPlan[d][h2].status === preferStatus && !newPlan[d][h2].lessonName) {
-                    
-                    newPlan[d][h1].lessonName = lesson.name;
-                    newPlan[d][h1].lessonColor = lesson.color;
-                    newPlan[d][h2].lessonName = lesson.name;
-                    newPlan[d][h2].lessonColor = lesson.color;
-                    
-                    placed += 2;
-                    chunkPlaced = true;
-                    break;
-                }
-             }
-             if (chunkPlaced) break;
-           }
-         }
+      while (placed < hoursToPlace && attempts < 200) {
+        attempts++;
+        let chunk = (hoursToPlace - placed >= 2) ? 2 : 1;
+        let chunkPlaced = false;
 
-         // Ardışık alan yoksa tekli boş slotlara atama yapma
-         if (!chunkPlaced) {
-           for (let d of DAYS) {
-             for (let h of HOURS) {
-                if (newPlan[d][h].status === preferStatus && !newPlan[d][h].lessonName) {
-                    newPlan[d][h].lessonName = lesson.name;
-                    newPlan[d][h].lessonColor = lesson.color;
-                    placed += 1;
-                    chunkPlaced = true;
-                    break;
-                }
-             }
-             if (chunkPlaced) break;
-           }
-         }
+        if (chunk === 2) {
+          for (let i = 0; i < DAYS.length; i++) {
+            let d = DAYS[(currentDayIdx + i) % DAYS.length];
+            for (let j = 0; j < HOURS.length - 1; j++) {
+              let h1 = HOURS[j];
+              let h2 = HOURS[j+1];
+              if (newPlan[d][h1].status === preferStatus && !newPlan[d][h1].lessonName &&
+                  newPlan[d][h2].status === preferStatus && !newPlan[d][h2].lessonName) {
+                  
+                  newPlan[d][h1].lessonName = lesson.name;
+                  newPlan[d][h1].lessonColor = lesson.color;
+                  newPlan[d][h2].lessonName = lesson.name;
+                  newPlan[d][h2].lessonColor = lesson.color;
+                  
+                  placed += 2;
+                  chunkPlaced = true;
+                  currentDayIdx = (currentDayIdx + i + 1) % DAYS.length; 
+                  break;
+              }
+            }
+            if (chunkPlaced) break;
+          }
+        }
 
-         if (!chunkPlaced) break; 
+        if (!chunkPlaced) {
+          for (let i = 0; i < DAYS.length; i++) {
+            let d = DAYS[(currentDayIdx + i) % DAYS.length];
+            for (let j = 0; j < HOURS.length; j++) {
+              let h = HOURS[j];
+              if (newPlan[d][h].status === preferStatus && !newPlan[d][h].lessonName) {
+                  newPlan[d][h].lessonName = lesson.name;
+                  newPlan[d][h].lessonColor = lesson.color;
+                  placed += 1;
+                  chunkPlaced = true;
+                  currentDayIdx = (currentDayIdx + i + 1) % DAYS.length;
+                  break;
+              }
+            }
+            if (chunkPlaced) break;
+          }
+        }
+
+        if (!chunkPlaced) break; 
       }
-      return placed;
+      return { placed, nextDayIdx: currentDayIdx };
     };
 
-    // Tüm havuzu dağıt (Önce yeşil müsaitlik, sonra sarı esneklik)
     remainingLessons.forEach(lesson => {
         let h = lesson.hours;
-        let placedInGreen = findAndPlace(lesson, h, 'available');
-        h -= placedInGreen;
+        let resGreen = placeLesson(lesson, h, 'available', greenDayIdx);
+        h -= resGreen.placed;
+        greenDayIdx = resGreen.nextDayIdx;
         
         if (h > 0) {
-            findAndPlace(lesson, h, 'tentative');
+            let resYellow = placeLesson(lesson, h, 'tentative', yellowDayIdx);
+            h -= resYellow.placed;
+            yellowDayIdx = resYellow.nextDayIdx;
         }
     });
 
     setWeeklyPlan(newPlan);
     setHasUnsavedChanges(true);
     setAiLoading(false);
-    Alert.alert('Başarılı', 'Dersleriniz, 2\'şerli ardışık saat blokları öncelikli olacak şekilde takviminize otomatik olarak yerleştirildi.');
+    Alert.alert('Başarılı', 'Dersleriniz, 2\'şerli bloklar halinde haftanın her gününe döngüsel (adil) olarak dağıtıldı!');
   };
 
-  // 7. BACKEND KAYIT VE ZORUNLU YERLEŞİM KONTROLÜ (VALIDATION)
+  // 7. BACKEND KAYIT (PROFİL EKRANI İÇİN ÖZEL DÖNÜŞÜM İLE)
   const handleSaveToBackend = async () => {
-    // Tüm eklenen derslerin en az bir saate yerleştirildiğini doğrulama adımı
     const assignedLessons = new Set();
     DAYS.forEach(day => {
       HOURS.forEach(hour => {
@@ -289,23 +295,35 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     });
 
     const unassigned = lessonPool.filter(lesson => !assignedLessons.has(lesson.name));
-    
     if (unassigned.length > 0) {
       const names = unassigned.map(l => l.name).join(', ');
       Alert.alert(
         'Eksik Ders Yerleşimi',
-        `Ders havuzuna eklediğiniz tüm derslerin haftalık planda en az bir saate yerleştirilmesi zorunludur.\n\nYerleştirilmeyen Dersler:\n${names}`
+        `Havuza eklediğiniz tüm dersleri takvime yerleştirmeniz zorunludur.\n\nYerleşmeyenler: ${names}`
       );
       return;
     }
 
     setLoading(true);
     try {
-      // Profil sayfasının listeleme yapısına tam uyumluluk sağlamak adına temiz nesne mimarisi gönderiliyor
+      const flatSchedule = [];
+      DAYS.forEach(d => {
+         HOURS.forEach(h => {
+             if(weeklyPlan[d][h].lessonName) {
+                 flatSchedule.push({
+                     day: `${d} (${h})`,
+                     lesson: weeklyPlan[d][h].lessonName
+                 });
+             }
+         });
+      });
+
       await api.post('/schedule/', { 
         plan: weeklyPlan, 
-        pool: lessonPool 
+        pool: lessonPool,
+        schedule: flatSchedule 
       });
+      
       setHasUnsavedChanges(false);
       Alert.alert('Başarılı', 'Haftalık çalışma planınız sisteme başarıyla kaydedildi.');
     } catch (err) {
@@ -331,102 +349,112 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      
-      <View style={styles.appBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={styles.appBarTitle}>Akıllı Takvim</Text>
-        <TouchableOpacity onPress={handleSaveToBackend} disabled={loading || !hasUnsavedChanges} style={[styles.saveBtn, !hasUnsavedChanges && { opacity: 0.5 }]}>
-          {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText}>Kaydet</Text>}
-        </TouchableOpacity>
-      </View>
+      <View style={styles.mainWrapper}>
+        <View style={styles.appBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={styles.appBarTitle}>Akıllı Takvim</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-      {/* Yatay Ders Havuzu Gösterimi */}
-      <View style={styles.poolStripContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.poolScroll}>
-          {lessonPool.length === 0 && (
-            <Text style={styles.emptyPoolStripText}>Havuz boş. Sağdaki panelden ders ekleyin.</Text>
-          )}
-          {lessonPool.map(lesson => (
-            <View key={lesson.id} style={[styles.poolChip, { backgroundColor: lesson.color + '20', borderColor: lesson.color }]}>
-              <View style={[styles.colorDot, { backgroundColor: lesson.color }]} />
-              <Text style={[styles.poolChipText, { color: isDarkMode ? '#fff' : lesson.color }]}>{lesson.name} ({lesson.hours}s)</Text>
-            </View>
-          ))}
-        </ScrollView>
-        <TouchableOpacity style={styles.poolManageBtn} onPress={() => setPoolManageModalVisible(true)}>
-          <MaterialIcons name="tune" size={24} color={theme.text} />
-        </TouchableOpacity>
-      </View>
+        {/* Yatay Ders Havuzu Gösterimi */}
+        <View style={styles.poolStripContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.poolScroll}>
+            {lessonPool.length === 0 && (
+              <Text style={styles.emptyPoolStripText}>Havuz boş. Sağdaki panelden ders ekleyin.</Text>
+            )}
+            {lessonPool.map(lesson => (
+              <View key={lesson.id} style={[styles.poolChip, { backgroundColor: lesson.color + '20', borderColor: lesson.color }]}>
+                <View style={[styles.colorDot, { backgroundColor: lesson.color }]} />
+                <Text style={[styles.poolChipText, { color: isDarkMode ? '#fff' : lesson.color }]}>{lesson.name} ({lesson.hours}s)</Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={styles.poolManageBtn} onPress={() => setPoolManageModalVisible(true)}>
+            <MaterialIcons name="tune" size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
 
-      {/* Gün Seçim Menüsü */}
-      <View style={styles.daysContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysScroll}>
-          {DAYS.map((day) => (
-            <TouchableOpacity key={day} style={[styles.dayCard, selectedDay === day && styles.dayCardActive]} onPress={() => setSelectedDay(day)}>
-              <Text style={[styles.dayText, selectedDay === day && styles.dayTextActive]}>{day.substring(0, 3)}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+        {/* Gün Seçim Menüsü */}
+        <View style={styles.daysContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysScroll}>
+            {DAYS.map((day) => (
+              <TouchableOpacity key={day} style={[styles.dayCard, selectedDay === day && styles.dayCardActive]} onPress={() => setSelectedDay(day)}>
+                <Text style={[styles.dayText, selectedDay === day && styles.dayTextActive]}>{day.substring(0, 3)}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
-      {/* Saat ve Ders Matrisi Alanı */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.hoursContainer}>
-        <Text style={styles.infoText}>Müsaitlik ayarı için sola, ders yerleşimi için sağdaki alana dokunun.</Text>
-        
-        {HOURS.map((hour) => {
-          const slot = weeklyPlan[selectedDay][hour];
-          const sStyle = getStatusStyle(slot.status);
+        {/* Saat ve Ders Matrisi Alanı */}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.hoursContainer}>
+          <Text style={styles.infoText}>Müsaitlik ayarı için sola, ders yerleşimi için sağdaki alana dokunun.</Text>
           
-          return (
-            <View key={hour} style={styles.hourRow}>
-              
-              <TouchableOpacity 
-                style={[styles.availabilityZone, { borderColor: sStyle.border, backgroundColor: sStyle.bg }]} 
-                onPress={() => toggleAvailability(hour)} 
-                activeOpacity={0.7}
-              >
-                <Text style={styles.hourText}>{hour}</Text>
-                <Text style={[styles.statusText, { color: sStyle.border }]}>{sStyle.text}</Text>
-              </TouchableOpacity>
+          {HOURS.map((hour) => {
+            const slot = weeklyPlan[selectedDay][hour];
+            const sStyle = getStatusStyle(slot.status);
+            
+            return (
+              <View key={hour} style={styles.hourRow}>
+                
+                <TouchableOpacity 
+                  style={[styles.availabilityZone, { borderColor: sStyle.border, backgroundColor: sStyle.bg }]} 
+                  onPress={() => toggleAvailability(hour)} 
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.hourText}>{hour}</Text>
+                  <Text style={[styles.statusText, { color: sStyle.border }]}>{sStyle.text}</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={[
-                  styles.lessonZone, 
-                  slot.lessonName 
-                    ? { backgroundColor: slot.lessonColor + '15', borderColor: slot.lessonColor } 
-                    : { backgroundColor: theme.surface, borderColor: theme.border }
-                ]} 
-                onPress={() => openLessonModal(hour)} 
-                activeOpacity={0.7}
-              >
-                {slot.lessonName ? (
-                  <View style={styles.filledLesson}>
-                    <View style={[styles.colorDot, { backgroundColor: slot.lessonColor, width: 12, height: 12, borderRadius: 6 }]} />
-                    <Text style={[styles.lessonText, { color: isDarkMode ? '#fff' : slot.lessonColor }]}>{slot.lessonName}</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.emptyLessonText}>
-                    {slot.status === 'busy' ? 'Bu saat dilimi meşgul.' : '+ Ders eklemek için dokun'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[
+                    styles.lessonZone, 
+                    slot.lessonName 
+                      ? { backgroundColor: slot.lessonColor + '15', borderColor: slot.lessonColor } 
+                      : { backgroundColor: theme.surface, borderColor: theme.border }
+                  ]} 
+                  onPress={() => openLessonModal(hour)} 
+                  activeOpacity={0.7}
+                >
+                  {slot.lessonName ? (
+                    <View style={styles.filledLesson}>
+                      <View style={[styles.colorDot, { backgroundColor: slot.lessonColor, width: 12, height: 12, borderRadius: 6 }]} />
+                      <Text style={[styles.lessonText, { color: isDarkMode ? '#fff' : slot.lessonColor }]}>{slot.lessonName}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.emptyLessonText}>
+                      {slot.status === 'busy' ? 'Bu saat dilimi meşgul.' : '+ Ders eklemek için dokun'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
 
-            </View>
-          );
-        })}
-      </ScrollView>
+              </View>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {/* SAĞ ALT SABİT DERS PROGRAMI ÖNER FAB BUTONU */}
-      <TouchableOpacity style={[styles.fabExtended, lessonPool.length === 0 && { opacity: 0.6 }]} onPress={handleAIGenerate} disabled={aiLoading || lessonPool.length === 0} activeOpacity={0.8}>
-        {aiLoading ? (
-          <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
-        ) : (
-          <MaterialIcons name="auto-awesome" size={22} color="#fff" style={{ marginRight: 8 }} />
-        )}
-        <Text style={styles.fabText}>Ders Programı Öner</Text>
-      </TouchableOpacity>
+      {/* WEB'DEKİ GİBİ ASLA KAYBOLMAYAN SABİT ALT BAR */}
+      <View style={styles.fixedBottomBar}>
+        <TouchableOpacity style={styles.bottomAiBtn} onPress={handleAIGenerate} disabled={aiLoading || lessonPool.length === 0} activeOpacity={0.8}>
+          {aiLoading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <MaterialIcons name="auto-awesome" size={20} color="#fff" />
+          )}
+          <Text style={styles.bottomBtnText}>Program Öner</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.bottomSaveBtn} onPress={handleSaveToBackend} disabled={loading || !hasUnsavedChanges} activeOpacity={0.8}>
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <MaterialIcons name="save" size={20} color="#fff" />
+          )}
+          <Text style={styles.bottomBtnText}>Kaydet</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* MODAL 1: DERS HAVUZU YÖNETİMİ PANELİ */}
       <Modal animationType="slide" transparent={true} visible={poolManageModalVisible} onRequestClose={() => setPoolManageModalVisible(false)}>
@@ -456,7 +484,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
             <View style={styles.manualInputRow}>
               <TextInput style={[styles.manualInput, { flex: 2 }]} placeholder="Ders Adı" placeholderTextColor={theme.textSecondary} value={newLessonName} onChangeText={setNewLessonName} />
               
-              {/* ARTI-EKSİ LOGOLU STEPPER SAAT SEÇİCİ */}
+              {/* ARTI-EKSİ LOGOLU STEPPER SAAT SEÇİCİ (MAKSİMUM 10 SAAT) */}
               <View style={styles.stepperContainer}>
                 <TouchableOpacity 
                   style={styles.stepperBtn} 
@@ -472,7 +500,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
                   style={styles.stepperBtn} 
                   onPress={() => {
                     const current = parseInt(newLessonHours) || 1;
-                    if (current < 16) setNewLessonHours((current + 1).toString());
+                    if (current < 10) setNewLessonHours((current + 1).toString());
                   }}
                 >
                   <MaterialIcons name="add" size={18} color="#fff" />
@@ -514,7 +542,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
             <Text style={styles.sectionHeader}>Veya Manuel Program Girin</Text>
             <View style={styles.manualInputRow}>
-              <TextInput style={[styles.manualInput, {marginRight: 8}]} placeholder="Örn: Paragraf + Problem Kampı" placeholderTextColor={theme.textSecondary} value={manualLessonInput} onChangeText={setManualLessonInput} />
+              <TextInput style={[styles.manualInput, {marginRight: 8}]} placeholder="Örn: Paragraf Çözümü" placeholderTextColor={theme.textSecondary} value={manualLessonInput} onChangeText={setManualLessonInput} />
               <TouchableOpacity style={styles.manualBtn} onPress={assignManualLesson}>
                 <Text style={styles.manualBtnText}>Ekle</Text>
               </TouchableOpacity>
@@ -540,12 +568,11 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
 const createStyles = (theme, isDarkMode) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.background },
+  mainWrapper: { flex: 1 },
   loadingContainer: { flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' },
   appBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: Platform.OS === 'android' ? 76 : 64, paddingTop: Platform.OS === 'android' ? 24 : 0, backgroundColor: theme.surface, borderBottomWidth: 1, borderColor: theme.border },
   backBtn: { width: 40, height: 44, justifyContent: 'center' },
   appBarTitle: { fontSize: 17, fontWeight: 'bold', color: theme.text },
-  saveBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, backgroundColor: theme.primary },
-  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 
   poolStripContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, borderBottomWidth: 1, borderColor: theme.border },
   poolScroll: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, alignItems: 'center' },
@@ -563,7 +590,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   infoText: { fontSize: 12, color: theme.textSecondary, textAlign: 'center', marginBottom: 12, paddingHorizontal: 10 },
 
-  hoursContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100, gap: 12 },
+  hoursContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 40, gap: 12 },
   hourRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10 },
   
   availabilityZone: { width: 80, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderRadius: 14, paddingVertical: 12 },
@@ -576,9 +603,11 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   lessonText: { fontSize: 15, fontWeight: 'bold', flex: 1 },
   emptyLessonText: { fontSize: 13, color: theme.textSecondary, fontStyle: 'italic' },
 
-  // SABİT SAĞ ALT FAB KONUMU
-  fabExtended: { position: 'absolute', bottom: 24, right: 24, flexDirection: 'row', backgroundColor: theme.primary, paddingHorizontal: 20, height: 56, borderRadius: 28, alignItems: 'center', elevation: 6, shadowColor: theme.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 6, zIndex: 99 },
-  fabText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  // YENİ SABİT ALT BAR STİLLERİ (WEB İLE AYNI MANTIK)
+  fixedBottomBar: { flexDirection: 'row', padding: 16, backgroundColor: theme.surface, borderTopWidth: 1, borderColor: theme.border, gap: 12 },
+  bottomAiBtn: { flex: 1, backgroundColor: theme.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12, elevation: 2 },
+  bottomSaveBtn: { flex: 1, backgroundColor: '#10b981', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12, elevation: 2 },
+  bottomBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14, marginLeft: 8 },
 
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   bottomSheetContent: { backgroundColor: theme.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '90%' },
@@ -601,7 +630,6 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   manualInputRow: { flexDirection: 'row', alignItems: 'center', width: '100%' },
   manualInput: { flex: 1, backgroundColor: theme.background, color: theme.text, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: theme.border, fontSize: 15 },
   
-  // STEPPER (ARTI EKSİ SEÇİCİ) STİLLERİ
   stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingHorizontal: 6, height: 52, marginHorizontal: 8 },
   stepperBtn: { backgroundColor: theme.primary, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   stepperText: { minWidth: 32, textAlign: 'center', fontSize: 15, fontWeight: 'bold' },
