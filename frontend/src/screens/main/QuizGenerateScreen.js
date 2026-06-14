@@ -67,21 +67,24 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        
-        <View style={styles.appBar}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.6}>
-            <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
-          </TouchableOpacity>
-          <Text style={styles.appBarTitle}>Akıllı Quiz Üretici</Text>
-          <View style={styles.placeholderBtn} />
-        </View>
+      
+      {/* 1. APP BAR DIŞARI ÇIKARILDI (SABİT KALACAK) */}
+      <View style={styles.appBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.6}>
+          <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={styles.appBarTitle}>Akıllı Quiz Üretici</Text>
+        <View style={styles.placeholderBtn} />
+      </View>
 
-        {/* KAYDIRMA (SCROLL) SORUNUNU ÇÖZEN KRİTİK KISIM: style={{ flex: 1 }} eklendi */}
+      {/* 2. KLAVYE KATMANI SADECE SCROLL'U KAPSIYOR */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        
+        {/* 3. SCROLLVIEW flex:1 İLE TAM EKRANA YAYILDI VE flexGrow KALDIRILDI */}
         <ScrollView 
           style={{ flex: 1 }} 
-          showsVerticalScrollIndicator={true} 
-          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ padding: 16, paddingBottom: 150 }} // Kaydırma garantisi için devasa alt boşluk
           keyboardShouldPersistTaps="handled"
         >
           
@@ -255,9 +258,6 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', paddingLeft: 6 },
   placeholderBtn: { width: 44, height: 44 },
   appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center' },
-  
-  // KAYDIRMA (SCROLL) İÇİN PADDING BOTTOM İYİCE ARTIRILDI
-  scrollContent: { padding: 16, paddingBottom: 150, flexGrow: 1 },
 
   cardContainer: { backgroundColor: theme.surface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: theme.border, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDarkMode ? 0.3 : 0.05, shadowRadius: 4 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
@@ -284,7 +284,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   actionBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 
-  resultBox: { marginTop: 24, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, marginBottom: 40 },
+  resultBox: { marginTop: 24, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
   resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#9c27b0', padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
   resultTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   resultContent: { backgroundColor: theme.surface, padding: 20, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderWidth: 1, borderColor: theme.border, borderTopWidth: 0 },
