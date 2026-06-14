@@ -82,12 +82,12 @@ export default function App() {
         
         {/* Auth Ekranları */}
         <Stack.Screen name="Login">
-  {(props) => <LoginScreen {...props} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
-</Stack.Screen>
+         {(props) => <LoginScreen {...props} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
+        </Stack.Screen>
 
-<Stack.Screen name="Register">
-  {(props) => <RegisterScreen {...props} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
-</Stack.Screen>
+        <Stack.Screen name="Register">
+         {(props) => <RegisterScreen {...props} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
+        </Stack.Screen>
         
         {/* Alt Menülü Ana Uygulama */}
         <Stack.Screen name="MainApp" component={MainTabs} />

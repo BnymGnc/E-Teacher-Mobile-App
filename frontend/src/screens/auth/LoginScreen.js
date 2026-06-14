@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../api';
@@ -22,7 +22,6 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
     setError(null);
     
     try {
-      // Django JWT TokenObtainPairView email'i 'username' alanında bekler
       const response = await api.post('/auth/login/', { 
         username: email, 
         password: password 
@@ -33,8 +32,7 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
       
       navigation.replace('MainApp');
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.';
-      setError(msg);
+      setError('Giriş başarısız. Lütfen email ve şifrenizi kontrol edin.');
     } finally {
       setLoading(false);
     }
@@ -42,25 +40,26 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        
+        {/* TEMA DEĞİŞTİRME BUTONU */}
+        <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme} activeOpacity={0.6}>
           <MaterialIcons name={isDarkMode ? "brightness-7" : "brightness-4"} size={28} color={theme.primary} />
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <MaterialIcons name="school" size={80} color={theme.primary} />
+          <MaterialIcons name="school" size={60} color={theme.primary} style={{ marginBottom: 10 }} />
           <Text style={[styles.title, { color: theme.primary }]}>E-Teacher</Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Eğitimin Yapay Zeka Hali</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Hesabınıza giriş yapın</Text>
         </View>
 
         <View style={styles.form}>
-          <Text style={[styles.label, { color: theme.text }]}>Hesabınıza giriş yapın</Text>
           <TextInput
             style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
             placeholder="E-Posta"
             placeholderTextColor={theme.textSecondary}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => { setEmail(text); if (error) setError(null); }}
             autoCapitalize="none"
             keyboardType="email-address"
           />
@@ -70,27 +69,27 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
             placeholderTextColor={theme.textSecondary}
             secureTextEntry
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => { setPassword(text); if (error) setError(null); }}
           />
 
           {error && (
             <View style={styles.errorBox}>
-              <MaterialIcons name="error-outline" size={20} color="#d32f2f" />
+              <MaterialIcons name="error-outline" size={20} color="#ef4444" />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
 
-          <TouchableOpacity style={[styles.loginButton, { backgroundColor: theme.primary }]} onPress={handleLogin} disabled={loading}>
+          <TouchableOpacity style={[styles.loginButton, { backgroundColor: theme.primary }]} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>Giriş Yap</Text>}
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.infoAlert, { backgroundColor: isDarkMode ? '#1a237e33' : '#e3f2fd', borderColor: theme.primary + '40' }]}>
-          <MaterialIcons name="info-outline" size={24} color={theme.primary} />
+        <View style={[styles.infoAlert, { backgroundColor: isDarkMode ? '#0c4a6e' : '#e0f2fe', borderColor: theme.primary + '40' }]}>
+          <MaterialIcons name="info-outline" size={24} color={isDarkMode ? '#38bdf8' : '#0284c7'} />
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={[styles.infoTitle, { color: theme.text }]}>Önemli Bilgilendirme</Text>
+            <Text style={[styles.infoTitle, { color: isDarkMode ? '#38bdf8' : '#0284c7' }]}>Bilgilendirme</Text>
             <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-              Sistemimiz ücretsiz sunucularda barındırıldığı için, uyanması 30-50 saniye sürebilir.
+              Projemiz ücretsiz sunucularda barındırıldığı için, ilk girişinizde sistemin uyanması 30-50 saniye sürebilir. Anlayışınız için teşekkürler.
             </Text>
           </View>
         </View>
@@ -109,20 +108,19 @@ export default function LoginScreen({ navigation, isDarkMode, toggleTheme }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 24, flexGrow: 1, justifyContent: 'center' },
-  themeToggle: { alignSelf: 'flex-end', padding: 10 },
+  themeToggle: { alignSelf: 'flex-end', padding: 10, zIndex: 10 },
   header: { alignItems: 'center', marginBottom: 40 },
-  title: { fontSize: 38, fontWeight: 'bold', marginTop: 10 },
-  subtitle: { fontSize: 16, marginTop: 4 },
+  title: { fontSize: 36, fontWeight: 'bold' },
+  subtitle: { fontSize: 16, marginTop: 8 },
   form: { width: '100%' },
-  label: { fontSize: 18, marginBottom: 20, textAlign: 'center', fontWeight: '500' },
-  input: { padding: 18, borderRadius: 14, borderWidth: 1, marginBottom: 16, fontSize: 16 },
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffebee', padding: 14, borderRadius: 10, marginBottom: 16 },
-  errorText: { color: '#d32f2f', marginLeft: 10, fontSize: 14, flex: 1 },
-  loginButton: { padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 10, elevation: 3 },
+  input: { padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 16, fontSize: 16 },
+  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2', padding: 14, borderRadius: 10, marginBottom: 16, borderWidth: 1, borderColor: '#fecaca' },
+  errorText: { color: '#ef4444', marginLeft: 10, fontSize: 14, flex: 1, fontWeight: '500' },
+  loginButton: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10, elevation: 2 },
   loginButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  infoAlert: { flexDirection: 'row', padding: 16, borderRadius: 14, marginTop: 32, borderWidth: 1 },
-  infoTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
-  infoText: { fontSize: 12, lineHeight: 18 },
+  infoAlert: { flexDirection: 'row', padding: 16, borderRadius: 12, marginTop: 32, borderWidth: 1 },
+  infoTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  infoText: { fontSize: 13, lineHeight: 20 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 32 },
   footerText: { fontSize: 16 },
   registerLink: { fontSize: 16, fontWeight: 'bold' }
