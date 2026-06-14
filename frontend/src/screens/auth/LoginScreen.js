@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../api';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
+// DÜZELTİLDİ: Parametre isDarkMode ve setIsDarkMode olarak güncellendi
 export default function LoginScreen({ navigation, isDarkMode, setIsDarkMode }) {
   const theme = isDarkMode ? darkTheme : lightTheme;
   const [email, setEmail] = useState('');
@@ -32,7 +33,8 @@ export default function LoginScreen({ navigation, isDarkMode, setIsDarkMode }) {
       
       navigation.replace('MainApp');
     } catch (err) {
-      setError('Giriş başarısız. Lütfen email ve şifrenizi kontrol edin.');
+      const msg = err.response?.data?.detail || 'Giriş yapılamadı. E-posta veya şifreniz hatalı.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -42,7 +44,7 @@ export default function LoginScreen({ navigation, isDarkMode, setIsDarkMode }) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
-        {/* TEMA DEĞİŞTİRME BUTONU */}
+        {/* TEMA DEĞİŞTİRME BUTONU DÜZELTİLDİ */}
         <TouchableOpacity style={styles.themeToggle} onPress={() => setIsDarkMode(!isDarkMode)} activeOpacity={0.6}>
           <MaterialIcons name={isDarkMode ? "brightness-7" : "brightness-4"} size={28} color={theme.primary} />
         </TouchableOpacity>

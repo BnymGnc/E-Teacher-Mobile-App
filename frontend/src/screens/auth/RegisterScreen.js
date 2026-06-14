@@ -4,11 +4,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import api from '../../api';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
+// DÜZELTİLDİ: Parametre isDarkMode ve setIsDarkMode olarak güncellendi
 export default function RegisterScreen({ navigation, isDarkMode, setIsDarkMode }) {
   const theme = isDarkMode ? darkTheme : lightTheme;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState(''); // Web'deki password2 eklendi
+  const [passwordConfirm, setPasswordConfirm] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -54,7 +55,7 @@ export default function RegisterScreen({ navigation, isDarkMode, setIsDarkMode }
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
-        {/* TEMA DEĞİŞTİRME BUTONU (App.js düzeltilince tıkır tıkır çalışacak) */}
+        {/* TEMA DEĞİŞTİRME BUTONU DÜZELTİLDİ */}
         <TouchableOpacity style={styles.themeToggle} onPress={() => setIsDarkMode(!isDarkMode)} activeOpacity={0.6}>
           <MaterialIcons name={isDarkMode ? "brightness-7" : "brightness-4"} size={28} color={theme.primary} />
         </TouchableOpacity>

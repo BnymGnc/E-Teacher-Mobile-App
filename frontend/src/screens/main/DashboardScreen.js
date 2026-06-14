@@ -6,7 +6,7 @@ import { lightTheme, darkTheme } from '../../theme/colors';
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 56) / 2; // Grid boşluk matematiği optimize edildi
 
-export default function DashboardScreen({ navigation, isDarkMode, toggleTheme }) {
+export default function DashboardScreen({ navigation, isDarkMode, setIsDarkMode }) {
   // Seçili temayı dinamik olarak belirliyoruz
   const theme = isDarkMode ? darkTheme : lightTheme;
   const styles = createStyles(theme, isDarkMode);
@@ -32,13 +32,13 @@ export default function DashboardScreen({ navigation, isDarkMode, toggleTheme })
             <Text style={styles.subText}>Çalışmalarını takip et ve hedeflerine ulaş.</Text>
           </View>
           <View style={styles.headerRight}>
-            {/* Tema Değiştirme Butonu (Güneş / Ay) */}
-            <TouchableOpacity style={styles.themeBtn} onPress={toggleTheme} activeOpacity={0.7}>
+            {/* Tema Değiştirme Butonu (Güneş / Ay) - DÜZELTİLDİ */}
+            <TouchableOpacity style={styles.themeBtn} onPress={() => setIsDarkMode(!isDarkMode)} activeOpacity={0.7}>
               <MaterialIcons name={isDarkMode ? "wb-sunny" : "nights-stay"} size={24} color={theme.primary} />
             </TouchableOpacity>
             
             {/* Profil Butonu */}
-            <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7} onPress={() => navigation.navigate('Profile')}>
               <MaterialIcons name="person" size={28} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -91,7 +91,6 @@ export default function DashboardScreen({ navigation, isDarkMode, toggleTheme })
   );
 }
 
-// Temaya ve mod bilgisine duyarlı dinamik stil havuzu
 const createStyles = (theme, isDarkMode) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.background },
   container: { flex: 1, backgroundColor: theme.background },
