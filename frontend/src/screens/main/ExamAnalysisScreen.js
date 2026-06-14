@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Keyboard } from 'react-native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import api from '../../api';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
 export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
@@ -10,11 +9,6 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
 
   const [examType, setExamType] = useState('TYT');
   const [aytTrack, setAytTrack] = useState('Sayısal');
-  const [goals, setGoals] = useState('');
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [result, setResult] = useState('');
 
   const [subjects, setSubjects] = useState([]);
 
@@ -107,32 +101,6 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
 
   const totalNet = computedNets.reduce((sum, s) => sum + s.net, 0);
 
-  // NETLERİ DİREKT API İLE YAPAY ZEKAYA (BACKENDE) GÖNDER
-  const handleAnalyze = async () => {
-    setLoading(true);
-    setError(null);
-    setResult('');
-    Keyboard.dismiss();
-
-    try {
-      // Backend'e sadece gerekenler ve netler gidiyor.
-      const payload = {
-        examType: examType,
-        goals: goals,
-        subjects: computedNets // Örn: [{ name: "Türkçe", net: 35.5 }, ...]
-      };
-
-      const response = await api.post('/ml/exam-analysis/', payload);
-
-      // Gelen yanıtı olduğu gibi basıyoruz
-      setResult(response.data.analysis || response.data.result || response.data.reply || response.data);
-    } catch (err) {
-      setError('Yapay Zeka API bağlantısında bir hata oluştu. Backend endpointinizi kontrol edin.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       
@@ -141,7 +109,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.6}>
           <MaterialIcons name="arrow-back-ios" size={22} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.appBarTitle}>Deneme Analizi</Text>
+        <Text style={styles.appBarTitle}>Net Hesaplayıcı</Text>
         <View style={styles.placeholderBtn} />
       </View>
 
@@ -154,7 +122,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
           
           <View style={styles.headerInfo}>
             <MaterialIcons name="assessment" size={40} color={theme.primary} />
-            <Text style={styles.mainTitle}>Netlerini Öğren, {"\n"}Yapay Zeka Yorumlasın</Text>
+            <Text style={styles.mainTitle}>Hızlı ve Kesin{"\n"}Net Hesaplama</Text>
           </View>
 
           {/* Sınav Türü Seçici */}
@@ -187,7 +155,7 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             </View>
           )}
 
-          {/* MOBİLE ÖZEL YENİ KART TASARIMI */}
+          {/* KART TASARIMI */}
           <View style={styles.subjectsContainer}>
             {subjects.map((s, idx) => (
               <View key={idx} style={styles.subjectCard}>
@@ -236,54 +204,11 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
             ))}
           </View>
 
-          {/* Toplam Net Görünümü */}
+          {/* SADECE TOPLAM NET KUTUSU KALDI */}
           <View style={styles.totalNetBox}>
             <Text style={styles.totalNetTitle}>Toplam Netiniz</Text>
             <Text style={styles.totalNetValue}>{totalNet.toFixed(2)} NET</Text>
           </View>
-
-          {/* Kişisel Hedef */}
-          <Text style={styles.goalsLabel}>Kişisel Hedefiniz / Notunuz (Opsiyonel)</Text>
-          <TextInput
-            style={styles.goalsInput}
-            multiline
-            placeholder="Örn: Süre yetiştiremedim, fende zorlandım..."
-            placeholderTextColor={theme.textSecondary}
-            value={goals}
-            onChangeText={setGoals}
-            textAlignVertical="top"
-          />
-
-          {error && (
-            <View style={styles.errorBox}>
-              <MaterialIcons name="error-outline" size={20} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
-          <TouchableOpacity style={styles.actionBtn} onPress={handleAnalyze} disabled={loading} activeOpacity={0.8}>
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <View style={styles.btnInner}>
-                <MaterialIcons name="auto-awesome" size={22} color="#fff" />
-                <Text style={styles.actionBtnText}>API Üzerinden Yapay Zeka'ya Sor</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* API'den Dönen Sonuç */}
-          {result !== '' && (
-            <View style={styles.resultBox}>
-              <View style={styles.resultHeader}>
-                <MaterialIcons name="insights" size={24} color="#fff" />
-                <Text style={styles.resultTitle}>Analiz Çıktısı</Text>
-              </View>
-              <View style={styles.resultContent}>
-                <Text style={styles.resultText}>{typeof result === 'string' ? result : JSON.stringify(result, null, 2)}</Text>
-              </View>
-            </View>
-          )}
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -298,8 +223,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   placeholderBtn: { width: 44, height: 44 },
   appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   
-  // Aşağı kaydırma sorunu için flexGrow ve yüksek alt boşluk
-  scrollContent: { flexGrow: 1, padding: 16, paddingBottom: 100 },
+  scrollContent: { flexGrow: 1, padding: 16, paddingBottom: 60 },
 
   headerInfo: { alignItems: 'center', marginBottom: 24, marginTop: 10 },
   mainTitle: { fontSize: 22, fontWeight: 'bold', color: theme.text, textAlign: 'center', marginTop: 12, lineHeight: 30 },
@@ -324,21 +248,5 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   totalNetBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5', padding: 20, borderRadius: 16, marginTop: 10, borderWidth: 1, borderColor: isDarkMode ? '#047857' : '#a7f3d0' },
   totalNetTitle: { fontSize: 16, fontWeight: 'bold', color: theme.text },
-  totalNetValue: { fontSize: 24, fontWeight: '900', color: isDarkMode ? '#34d399' : '#059669' },
-
-  goalsLabel: { fontSize: 14, fontWeight: 'bold', color: theme.text, marginTop: 24, marginBottom: 8, marginLeft: 4 },
-  goalsInput: { backgroundColor: theme.surface, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 16, fontSize: 15, minHeight: 100 },
-
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2', padding: 14, borderRadius: 12, marginTop: 16, borderWidth: 1, borderColor: '#fecaca' },
-  errorText: { color: '#ef4444', marginLeft: 10, fontSize: 14, flex: 1, fontWeight: '500' },
-  
-  actionBtn: { backgroundColor: theme.primary, padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 24, elevation: 3, shadowColor: theme.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-  btnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  actionBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-
-  resultBox: { marginTop: 32, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
-  resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0284c7', padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-  resultTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  resultContent: { backgroundColor: theme.surface, padding: 20, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderWidth: 1, borderColor: theme.border, borderTopWidth: 0 },
-  resultText: { fontSize: 15, color: theme.text, lineHeight: 26 }
+  totalNetValue: { fontSize: 24, fontWeight: '900', color: isDarkMode ? '#34d399' : '#059669' }
 });
