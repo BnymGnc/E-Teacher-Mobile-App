@@ -16,10 +16,12 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
   const [credits, setCredits] = useState(0);
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   
-  // Gerçek İstatistik ve Liste Stateleri
+  // Listeleme ve İstatistik Stateleri
   const [reportHistory, setReportHistory] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [stats, setStats] = useState({ avgPuan: 0, avgSaat: 0 });
+  const [totalReports, setTotalReports] = useState(0);
+  const [totalLessons, setTotalLessons] = useState(0);
 
   const [userData, setUserData] = useState({
     username: '',
@@ -47,36 +49,67 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
             setCredits(profileRes.data.ai_credits || 0);
             setIsCalendarConnected(profileRes.data.is_calendar_connected || false);
 
-            // Raporları İşleme ve Aylık Ortalama Hesaplama
+            // 1. RAPOR GEÇMİŞİNİ İŞLEME
+            let reportsArray = [];
             if (reportsRes.data && Array.isArray(reportsRes.data)) {
-              // Her gün için sadece bir rapor olmasını sağla (eskisini güncelleyerek)
+                reportsArray = reportsRes.data;
+            } else if (reportsRes.data && Array.isArray(reportsRes.data.reports)) {
+                reportsArray = reportsRes.data.reports;
+            }
+
+            if (reportsArray.length > 0) {
               const uniqueReportsMap = new Map();
-              reportsRes.data.forEach(report => {
+              reportsArray.forEach(report => {
                  uniqueReportsMap.set(report.date, report);
               });
               
               const uniqueReports = Array.from(uniqueReportsMap.values());
-              // Tarihe göre sıralayıp son 30 günü al
               const sortedReports = uniqueReports.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 30);
+              
               setReportHistory(sortedReports);
+              setTotalReports(sortedReports.length);
 
-              // Aylık Ortalama İstatistikleri
-              if (sortedReports.length > 0) {
-                 const totalPuan = sortedReports.reduce((acc, curr) => acc + (Number(curr.productivityScore) || Number(curr.productivity) || 0), 0);
-                 const totalSaat = sortedReports.reduce((acc, curr) => acc + (Number(curr.studyHours) || 0), 0);
-                 setStats({
-                    avgPuan: (totalPuan / sortedReports.length).toFixed(1),
-                    avgSaat: (totalSaat / sortedReports.length).toFixed(1)
-                 });
-              } else {
-                 setStats({ avgPuan: 0, avgSaat: 0 });
+              const totalPuan = sortedReports.reduce((acc, curr) => acc + (Number(curr.productivityScore) || Number(curr.productivity) || 0), 0);
+              const totalSaat = sortedReports.reduce((acc, curr) => acc + (Number(curr.studyHours) || 0), 0);
+              setStats({
+                avgPuan: (totalPuan / sortedReports.length).toFixed(1),
+                avgSaat: (totalSaat / sortedReports.length).toFixed(1)
+              });
+            } else {
+              setReportHistory([]);
+              setTotalReports(0);
+              setStats({ avgPuan: 0, avgSaat: 0 });
+            }
+
+            // 2. TAKVİM / DERS PROGRAMI İŞLEME (GÜÇLÜ PARSER)
+            let fetchedSchedule = [];
+            const sData = scheduleRes.data;
+            
+            if (sData) {
+              // Eğer direkt diziyse
+              if (Array.isArray(sData)) {
+                  fetchedSchedule = sData;
+              } 
+              // Eğer { schedule: [...] } içindeyse
+              else if (sData.schedule && Array.isArray(sData.schedule)) {
+                  fetchedSchedule = sData.schedule;
+              } 
+              // Eğer direkt { plan: {...} } objesiyse içinden cımbızla çek
+              else if (sData.plan) {
+                  const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+                  const HOURS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+                  DAYS.forEach(d => {
+                      HOURS.forEach(h => {
+                          if (sData.plan[d] && sData.plan[d][h] && sData.plan[d][h].lessonName) {
+                              fetchedSchedule.push({ day: `${d} (${h})`, lesson: sData.plan[d][h].lessonName });
+                          }
+                      });
+                  });
               }
             }
 
-            // Takvim Programını İşleme
-            if (scheduleRes.data && Array.isArray(scheduleRes.data)) {
-              setSchedule(scheduleRes.data);
-            }
+            setSchedule(fetchedSchedule);
+            setTotalLessons(fetchedSchedule.length);
           }
         } catch (err) {
           console.error("Profil verileri yüklenirken hata oluştu:", err);
@@ -128,7 +161,6 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
       await api.post('/calendar/sync/');
       Alert.alert("Başarılı", "Güncel takviminiz başarıyla eklendi/güncellendi.");
     } catch (err) {
-      // Hata olsa bile kullanıcıyı bilgilendir
       Alert.alert("Bilgi", "Takvim etkinlikleri kontrol edildi.");
     } finally {
       setCalendarLoading(false);
@@ -211,6 +243,30 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           )}
         </View>
 
+        <Text style={styles.sectionTitle}>Eğitim & Planlama Takibi</Text>
+
+        {/* KAYITLI DERS PROGRAMI (LİSTE HALİNDE) */}
+        <Text style={styles.listHeader}>Kayıtlı Ders Programım ({totalLessons} Ders)</Text>
+        <View style={styles.listCard}>
+          {schedule.length > 0 ? schedule.map((item, index) => (
+            <View key={index} style={styles.listItem}>
+              <Text style={[styles.listText, {fontWeight: 'bold', color: theme.primary}]}>{item.day || item.date || `Gün ${index+1}`}</Text>
+              <Text style={styles.listText}>{item.lesson || item.title || item.subject || 'Planlı Ders'}</Text>
+            </View>
+          )) : <Text style={styles.emptyText}>Henüz kaydedilmiş bir çalışma programınız yok.</Text>}
+        </View>
+
+        {/* RAPOR GEÇMİŞİ (LİSTE HALİNDE) */}
+        <Text style={styles.listHeader}>Rapor Geçmişi (Son 30 Gün) ({totalReports} Rapor)</Text>
+        <View style={styles.listCard}>
+          {reportHistory.length > 0 ? reportHistory.map((report, index) => (
+            <View key={index} style={styles.listItem}>
+              <Text style={[styles.listText, {fontWeight: 'bold', color: theme.primary}]}>{report.date}</Text>
+              <Text style={styles.listText}>Puan: {report.productivityScore || report.productivity || 0}/10  |  Saat: {report.studyHours || 0}</Text>
+            </View>
+          )) : <Text style={styles.emptyText}>Henüz kaydedilmiş bir günlük raporunuz yok.</Text>}
+        </View>
+
         <Text style={styles.sectionTitle}>Hesap Bilgilerini Düzenle</Text>
 
         {/* PROFİL GÜNCELLEME FORMU */}
@@ -237,30 +293,6 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           <TouchableOpacity style={styles.updateBtn} onPress={handleUpdate} disabled={loading} activeOpacity={0.8}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.updateBtnText}>Bilgilerimi Güncelle</Text>}
           </TouchableOpacity>
-        </View>
-
-        <Text style={styles.sectionTitle}>Eğitim & Planlama</Text>
-
-        {/* KAYITLI DERS PROGRAMI (LİSTE HALİNDE) */}
-        <Text style={styles.listHeader}>Kayıtlı Ders Programım</Text>
-        <View style={styles.listCard}>
-          {schedule.length > 0 ? schedule.map((item, index) => (
-            <View key={index} style={styles.listItem}>
-              <Text style={[styles.listText, {fontWeight: 'bold', color: theme.primary}]}>{item.day || item.date || `Gün ${index+1}`}</Text>
-              <Text style={styles.listText}>{item.lesson || item.title || item.subject || 'Planlı Ders'}</Text>
-            </View>
-          )) : <Text style={styles.emptyText}>Henüz kayıtlı bir programınız yok.</Text>}
-        </View>
-
-        {/* RAPOR GEÇMİŞİ (LİSTE HALİNDE) */}
-        <Text style={styles.listHeader}>Rapor Geçmişi (Son 30 Gün)</Text>
-        <View style={styles.listCard}>
-          {reportHistory.length > 0 ? reportHistory.map((report, index) => (
-            <View key={index} style={styles.listItem}>
-              <Text style={[styles.listText, {fontWeight: 'bold', color: theme.primary}]}>{report.date}</Text>
-              <Text style={styles.listText}>Puan: {report.productivityScore || report.productivity || 0}/10  |  Saat: {report.studyHours || 0}</Text>
-            </View>
-          )) : <Text style={styles.emptyText}>Henüz kayıtlı bir raporunuz yok.</Text>}
         </View>
 
         <Text style={styles.sectionTitle}>Uygulama Ayarları</Text>
@@ -317,7 +349,7 @@ const createStyles = (theme) => StyleSheet.create({
   syncBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
 
   sectionTitle: { fontSize: 13, fontWeight: '700', color: theme.text, opacity: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
-  listHeader: { fontSize: 13, color: theme.text, opacity: 0.8, marginBottom: 6, marginLeft: 4 },
+  listHeader: { fontSize: 13, color: theme.text, opacity: 0.8, marginBottom: 6, marginLeft: 4, fontWeight: 'bold' },
   
   listCard: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
   listItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border },
