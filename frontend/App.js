@@ -23,7 +23,7 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState(true); // Tema State'i
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   // ALT MENÜ (BOTTOM TABS) MİMARİSİ
   function MainTabs() {
@@ -60,11 +60,11 @@ export default function App() {
         </Tab.Screen>
         
         <Tab.Screen name="Takvim">
-          {(props) => <ScheduleScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <ScheduleScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Tab.Screen>
         
         <Tab.Screen name="Rapor">
-          {(props) => <DailyReportScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <DailyReportScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Tab.Screen>
         
         <Tab.Screen name="Profil">
@@ -74,7 +74,6 @@ export default function App() {
     );
   }
 
-  // ANA YÖNLENDİRİCİ (STACK)
   return (
     <NavigationContainer>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
@@ -82,11 +81,11 @@ export default function App() {
         
         {/* Auth Ekranları */}
         <Stack.Screen name="Login">
-         {(props) => <LoginScreen {...props} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
+          {(props) => <LoginScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
 
         <Stack.Screen name="Register">
-         {(props) => <RegisterScreen {...props} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
+          {(props) => <RegisterScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
         
         {/* Alt Menülü Ana Uygulama */}
@@ -94,19 +93,25 @@ export default function App() {
 
         {/* Alt Menü Olmadan Açılacak İç Ekranlar */}
         <Stack.Screen name="ExamAnalysis">
-          {(props) => <ExamAnalysisScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <ExamAnalysisScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
         <Stack.Screen name="AIChat">
-          {(props) => <AIChatScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <AIChatScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
         <Stack.Screen name="Summarize">
-          {(props) => <SummarizeScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <SummarizeScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
         <Stack.Screen name="QuizGenerate">
-          {(props) => <QuizGenerateScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <QuizGenerateScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
         <Stack.Screen name="TargetNets">
-          {(props) => <TargetNetsScreen {...props} isDarkMode={isDarkMode} />}
+          {(props) => <TargetNetsScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
+        </Stack.Screen>
+        <Stack.Screen name="Schedule">
+          {(props) => <ScheduleScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
+        </Stack.Screen>
+        <Stack.Screen name="DailyReport">
+          {(props) => <DailyReportScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
 
       </Stack.Navigator>
