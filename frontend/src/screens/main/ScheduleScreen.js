@@ -31,6 +31,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   
   // Havuz Yönetimi Modalı
   const [poolManageModalVisible, setPoolManageModalVisible] = useState(false);
@@ -42,7 +43,25 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   const [selectedHourForLesson, setSelectedHourForLesson] = useState(null);
   const [manualLessonInput, setManualLessonInput] = useState('');
 
-  // 1. ÇIKIŞ KORUMASI
+  // 1. ÖNCEKİ KAYITLI PROGRAMI YÜKLE
+  useEffect(() => {
+    const loadSavedSchedule = async () => {
+      try {
+        const res = await api.get('/schedule/');
+        if (res.data && res.data.plan && res.data.pool) {
+          setWeeklyPlan(res.data.plan);
+          setLessonPool(res.data.pool);
+        }
+      } catch (err) {
+        console.log("Henüz kayıtlı bir program yok.");
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    loadSavedSchedule();
+  }, []);
+
+  // 2. ÇIKIŞ KORUMASI
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (!hasUnsavedChanges) return;
@@ -59,7 +78,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     return unsubscribe;
   }, [navigation, hasUnsavedChanges]);
 
-  // 2. DERS HAVUZU İŞLEMLERİ
+  // 3. DERS HAVUZU İŞLEMLERİ
   const handleAddLessonToPool = () => {
     if (newLessonName.trim() === '') {
       Alert.alert('Uyarı', 'Lütfen ders adı girin.');
@@ -82,7 +101,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setHasUnsavedChanges(true);
   };
 
-  // 3. MÜSAİTLİK DURUMUNU DEĞİŞTİRME
+  // 4. MÜSAİTLİK DURUMUNU DEĞİŞTİRME
   const toggleAvailability = (hour) => {
     const currentStatus = weeklyPlan[selectedDay][hour].status;
     let nextStatus = 'available';
@@ -96,7 +115,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setHasUnsavedChanges(true);
   };
 
-  // 4. DERS SEÇİMİ
+  // 5. DERS SEÇİMİ
   const openLessonModal = (hour) => {
     if (weeklyPlan[selectedDay][hour].status === 'busy') {
       Alert.alert('Meşgul Saat', 'Bu saat dilimi (Kırmızı) meşgul işaretli. Önce sol taraftan müsaitliği değiştirin.');
@@ -120,6 +139,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
   };
 
   const assignManualLesson = () => {
+    if (manualLessonInput.trim() === '') return;
     setWeeklyPlan(prev => ({
       ...prev,
       [selectedDay]: { 
@@ -143,24 +163,117 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     setLessonModalVisible(false);
   };
 
-  // 5. AI VE KAYIT
+  // 6. GELİŞMİŞ ALGORİTMA: AI PROGRAM OLUŞTURUCU
   const handleAIGenerate = async () => {
     if (lessonPool.length === 0) {
       Alert.alert('Uyarı', 'Lütfen önce havuz yönetimi panelinden ders ekleyin.');
       return;
     }
     setAiLoading(true);
-    try {
-      setTimeout(() => {
-        Alert.alert('Hazır', 'Yapay zeka saatlerinizi ve havuzunuzu analiz ederek programı doldurdu!');
-        setAiLoading(false);
-        setHasUnsavedChanges(true);
-      }, 1500);
-    } catch (err) {
+
+    const totalRequiredHours = lessonPool.reduce((sum, lesson) => sum + lesson.hours, 0);
+
+    const greenSlots = [];
+    const yellowSlots = [];
+
+    // Müsait ve esnek alanları bul
+    DAYS.forEach(day => {
+      HOURS.forEach(hour => {
+        const slot = weeklyPlan[day][hour];
+        if (!slot.lessonName) { // Sadece boş olanlara atama yapılacak
+          if (slot.status === 'available') greenSlots.push({ day, hour });
+          else if (slot.status === 'tentative') yellowSlots.push({ day, hour });
+        }
+      });
+    });
+
+    const totalAvailable = greenSlots.length + yellowSlots.length;
+
+    // KAPASİTE KONTROLÜ
+    if (totalRequiredHours > totalAvailable) {
       setAiLoading(false);
+      Alert.alert('Kapasite Hatası', `Havuzdaki dersleriniz toplam ${totalRequiredHours} saat. Ancak takvimde sadece ${totalAvailable} saat müsait alan (Yeşil+Sarı) var. Müsaitliği artırın veya ders saatini azaltın.`);
+      return;
     }
+
+    let newPlan = JSON.parse(JSON.stringify(weeklyPlan));
+    let remainingLessons = JSON.parse(JSON.stringify(lessonPool));
+
+    // Yerleştirme Algoritması
+    const findAndPlace = (lesson, hoursToPlace, preferStatus) => {
+      let placed = 0;
+      while (placed < hoursToPlace) {
+         let chunk = (hoursToPlace - placed >= 2) ? 2 : 1;
+         let chunkPlaced = false;
+
+         // 2'şerli (Ardışık) atama dene
+         if (chunk === 2) {
+           for (let d of DAYS) {
+             for (let i = 0; i < HOURS.length - 1; i++) {
+                let h1 = HOURS[i];
+                let h2 = HOURS[i+1];
+                if (newPlan[d][h1].status === preferStatus && !newPlan[d][h1].lessonName &&
+                    newPlan[d][h2].status === preferStatus && !newPlan[d][h2].lessonName) {
+                    
+                    newPlan[d][h1].lessonName = lesson.name;
+                    newPlan[d][h1].lessonColor = lesson.color;
+                    newPlan[d][h2].lessonName = lesson.name;
+                    newPlan[d][h2].lessonColor = lesson.color;
+                    
+                    placed += 2;
+                    chunkPlaced = true;
+                    break;
+                }
+             }
+             if (chunkPlaced) break;
+           }
+         }
+
+         // Ardışık bulunamadıysa tekli (1 saatlik) atama yap
+         if (!chunkPlaced) {
+           for (let d of DAYS) {
+             for (let h of HOURS) {
+                if (newPlan[d][h].status === preferStatus && !newPlan[d][h].lessonName) {
+                    newPlan[d][h].lessonName = lesson.name;
+                    newPlan[d][h].lessonColor = lesson.color;
+                    placed += 1;
+                    chunkPlaced = true;
+                    break;
+                }
+             }
+             if (chunkPlaced) break;
+           }
+         }
+
+         // Eğer bu öncelikte (Yeşil veya Sarı) hiç yerleştirilemezse döngüyü kır, diğerine geç
+         if (!chunkPlaced) break; 
+      }
+      return placed;
+    };
+
+    // Tüm havuzdaki dersleri dön
+    for (let i = 0; i < remainingLessons.length; i++) {
+        let lesson = remainingLessons[i];
+        let h = lesson.hours;
+        
+        // 1. Öncelik: Yeşillere (Müsait) atama
+        let placedInGreen = findAndPlace(lesson, h, 'available');
+        h -= placedInGreen;
+        
+        // 2. Öncelik: Kalan ders saati varsa Sarılara (Esnek) atama
+        if (h > 0) {
+            let placedInYellow = findAndPlace(lesson, h, 'tentative');
+            h -= placedInYellow;
+        }
+    }
+
+    setWeeklyPlan(newPlan);
+    setHasUnsavedChanges(true);
+    setAiLoading(false);
+    Alert.alert('Başarılı', 'Dersleriniz 2\'şer saatlik bloklar öncelikli olmak üzere, önce yeşil (müsait) sonra sarı (esnek) alanlara dağıtıldı!');
   };
 
+  // 7. BACKEND'E KAYIT
   const handleSaveToBackend = async () => {
     setLoading(true);
     try {
@@ -174,12 +287,19 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
     }
   };
 
-  // UI YARDIMCILARI
   const getStatusStyle = (status) => {
     if (status === 'available') return { border: '#10b981', text: 'Müsait', bg: isDarkMode ? '#10b98115' : '#ecfdf5' };
     if (status === 'busy') return { border: '#ef4444', text: 'Meşgul', bg: isDarkMode ? '#ef444415' : '#fef2f2' };
     return { border: '#f59e0b', text: 'Esnek', bg: isDarkMode ? '#f59e0b15' : '#fffbeb' };
   };
+
+  if (initialLoading) {
+    return (
+      <View style={{flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center'}}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -207,7 +327,6 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
             </View>
           ))}
         </ScrollView>
-        {/* Sağ Taraftaki Sabit Yönetim Sembolü */}
         <TouchableOpacity style={styles.poolManageBtn} onPress={() => setPoolManageModalVisible(true)}>
           <MaterialIcons name="tune" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -234,7 +353,6 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
           return (
             <View key={hour} style={styles.hourRow}>
               
-              {/* Sol: Sadece saatin etrafı renklenir */}
               <TouchableOpacity 
                 style={[styles.availabilityZone, { borderColor: sStyle.border, backgroundColor: sStyle.bg }]} 
                 onPress={() => toggleAvailability(hour)} 
@@ -244,7 +362,6 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
                 <Text style={[styles.statusText, { color: sStyle.border }]}>{sStyle.text}</Text>
               </TouchableOpacity>
 
-              {/* Sağ: Ders Seçim Alanı (Sabit arka plan, dolunca renklenir) */}
               <TouchableOpacity 
                 style={[
                   styles.lessonZone, 
@@ -282,7 +399,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         <Text style={styles.fabText}>Program Oluştur</Text>
       </TouchableOpacity>
 
-      {/* MODAL 1: Havuz Yönetimi Modalı (Alttan Açılan Panel) */}
+      {/* MODAL 1: Havuz Yönetimi Modalı */}
       <Modal animationType="slide" transparent={true} visible={poolManageModalVisible} onRequestClose={() => setPoolManageModalVisible(false)}>
         <View style={styles.bottomSheetOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.bottomSheetContent}>
@@ -290,7 +407,6 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
             <Text style={styles.modalTitle}>Ders Havuzu Yönetimi</Text>
             <Text style={styles.modalSubTitle}>Haftalık çalışmak istediğiniz dersleri ve saat hedeflerini buradan ekleyip çıkarabilirsiniz.</Text>
             
-            {/* Mevcut Dersler Listesi */}
             <ScrollView style={styles.managePoolList} showsVerticalScrollIndicator={false}>
               {lessonPool.length > 0 ? lessonPool.map(lesson => (
                 <View key={lesson.id} style={[styles.managePoolItem, { borderColor: lesson.color }]}>
@@ -307,13 +423,12 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
               )}
             </ScrollView>
 
-            {/* Yeni Ders Ekleme Formu */}
             <Text style={styles.sectionHeader}>Yeni Ders Ekle</Text>
             <View style={styles.manualInputRow}>
               <TextInput style={[styles.manualInput, { flex: 2 }]} placeholder="Ders Adı (Örn: Fizik)" placeholderTextColor={theme.textSecondary} value={newLessonName} onChangeText={setNewLessonName} />
               <TextInput style={[styles.manualInput, { flex: 1, marginHorizontal: 8 }]} placeholder="Saat" keyboardType="numeric" placeholderTextColor={theme.textSecondary} value={newLessonHours} onChangeText={setNewLessonHours} />
               <TouchableOpacity style={styles.manualBtn} onPress={handleAddLessonToPool}>
-                <MaterialIcons name="add" size={24} color="#fff" />
+                <Text style={styles.manualBtnText}>Ekle</Text>
               </TouchableOpacity>
             </View>
 
@@ -324,7 +439,7 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
         </View>
       </Modal>
 
-      {/* MODAL 2: Gelişmiş Ders Seçim Paneli (Alttan Açılan) */}
+      {/* MODAL 2: Ders Seçim Paneli */}
       <Modal animationType="slide" transparent={true} visible={lessonModalVisible} onRequestClose={() => setLessonModalVisible(false)}>
         <View style={styles.bottomSheetOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.bottomSheetContent}>
@@ -347,9 +462,9 @@ export default function ScheduleScreen({ navigation, isDarkMode }) {
 
             <Text style={styles.sectionHeader}>Veya Manuel Girin</Text>
             <View style={styles.manualInputRow}>
-              <TextInput style={styles.manualInput} placeholder="Örn: Deneme Çözümü" placeholderTextColor={theme.textSecondary} value={manualLessonInput} onChangeText={setManualLessonInput} />
+              <TextInput style={[styles.manualInput, {marginRight: 8}]} placeholder="Örn: Deneme Çözümü" placeholderTextColor={theme.textSecondary} value={manualLessonInput} onChangeText={setManualLessonInput} />
               <TouchableOpacity style={styles.manualBtn} onPress={assignManualLesson}>
-                <MaterialIcons name="send" size={20} color="#fff" />
+                <Text style={styles.manualBtnText}>Ekle</Text>
               </TouchableOpacity>
             </View>
 
@@ -379,7 +494,6 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   saveBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, backgroundColor: theme.primary },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 
-  // Havuz Şeridi ve Yönetim Butonu
   poolStripContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, borderBottomWidth: 1, borderColor: theme.border },
   poolScroll: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, alignItems: 'center' },
   emptyPoolStripText: { fontSize: 13, color: theme.textSecondary, fontStyle: 'italic', alignSelf: 'center' },
@@ -395,7 +509,6 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   infoText: { fontSize: 12, color: theme.textSecondary, textAlign: 'center', marginBottom: 12, paddingHorizontal: 10 },
 
-  // Saat Matrisi Stilleri (GÜNCELLENDİ)
   hoursContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100, gap: 12 },
   hourRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10 },
   
@@ -412,7 +525,6 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   fabExtended: { position: 'absolute', bottom: 24, right: 24, flexDirection: 'row', backgroundColor: theme.primary, paddingHorizontal: 20, height: 56, borderRadius: 28, alignItems: 'center', elevation: 6, shadowColor: theme.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 6 },
   fabText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
-  // Alttan Açılan Modallar (Bottom Sheet)
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   bottomSheetContent: { backgroundColor: theme.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '90%' },
   sheetHandle: { width: 40, height: 5, backgroundColor: theme.border, borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
@@ -421,12 +533,10 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   modalSubTitle: { fontSize: 14, color: theme.textSecondary, marginBottom: 16, lineHeight: 20 },
   sectionHeader: { fontSize: 14, fontWeight: 'bold', color: theme.textSecondary, marginTop: 10, marginBottom: 8 },
   
-  // Havuz Yönetimi Liste
   managePoolList: { maxHeight: 180, marginBottom: 16 },
   managePoolItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 8, backgroundColor: theme.background },
   managePoolItemText: { fontSize: 15, fontWeight: 'bold' },
   
-  // Ders Seçimi Liste
   sheetPoolList: { maxHeight: 180, marginBottom: 16 },
   sheetPoolItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
   sheetPoolItemText: { flex: 1, fontSize: 15, fontWeight: 'bold', marginLeft: 10 },
@@ -435,7 +545,9 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
 
   manualInputRow: { flexDirection: 'row', alignItems: 'center' },
   manualInput: { flex: 1, backgroundColor: theme.background, color: theme.text, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: theme.border, fontSize: 15 },
-  manualBtn: { backgroundColor: theme.primary, width: 52, height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  // YENİ EKLE BUTONU STİLLERİ
+  manualBtn: { backgroundColor: theme.primary, paddingHorizontal: 16, height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  manualBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
   closeModalBtn: { backgroundColor: theme.primary, paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 24 },
   closeModalBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
