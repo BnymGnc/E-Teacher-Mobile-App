@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native'; // ANLIK YENİLEME İÇİN EKLENDİ
+import { useFocusEffect } from '@react-navigation/native'; 
 import { lightTheme, darkTheme } from '../../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../api'; 
@@ -16,6 +16,10 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
   const [credits, setCredits] = useState(0);
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   
+  // Gerçek İstatistik Stateleri
+  const [totalReports, setTotalReports] = useState(0);
+  const [totalLessons, setTotalLessons] = useState(0);
+
   const [userData, setUserData] = useState({
     username: '',
     password: ''
@@ -23,31 +27,46 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
 
   const MAX_CREDITS = 20;
 
-  // --- VERİLERİ ÇEKME (SAYFAYA HER ODAKLANILDIĞINDA ÇALIŞIR) ---
+  // --- TÜM GERÇEK VERİLERİ BACKENDDEN ÇEKME (ODAKLANMA ETKİSİ) ---
   useFocusEffect(
     useCallback(() => {
-      let isActive = true; // Sayfa değiştirilirse isteği iptal etmek için
+      let isActive = true;
 
-      const fetchProfile = async () => {
+      const fetchAllProfileData = async () => {
         try {
-          const response = await api.get('/auth/profile/');
+          // 1. Profil ve Kota Bilgilerini Çek
+          const profileRes = await api.get('/auth/profile/');
+          // 2. Gerçek Kayıtlı Rapor Sayısını Çek
+          const reportsRes = await api.get('/report/all/');
+          // 3. Gerçek Takvim/Ders Programı Geçmişini Çek
+          const scheduleRes = await api.get('/schedule/');
+
           if (isActive) {
+            // Profil Verilerini Set Et
             setUserData({
-              username: response.data.username || '',
+              username: profileRes.data.username || '',
               password: '' 
             });
-            setCredits(response.data.ai_credits || 0);
-            setIsCalendarConnected(response.data.is_calendar_connected || false);
+            setCredits(profileRes.data.ai_credits || 0);
+            setIsCalendarConnected(profileRes.data.is_calendar_connected || false);
+
+            // İstatistikleri Set Et (Gelen dizilerin uzunluğuna göre dinamik hesaplama)
+            if (reportsRes.data && Array.isArray(reportsRes.data)) {
+              setTotalReports(reportsRes.data.length);
+            }
+            if (scheduleRes.data && Array.isArray(scheduleRes.data)) {
+              setTotalLessons(scheduleRes.data.length);
+            }
           }
         } catch (err) {
-          console.error("Profil çekme hatası:", err);
+          console.error("Profil verileri yüklenirken hata oluştu:", err);
         }
       };
 
-      fetchProfile();
+      fetchAllProfileData();
 
       return () => {
-        isActive = false; // Temizlik (Cleanup) işlemi
+        isActive = false;
       };
     }, [])
   );
@@ -57,7 +76,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
     setLoading(true);
     try {
       await api.put('/auth/profile/', userData);
-      Alert.alert("Başarılı", "Profilin başarıyla güncellendi!");
+      Alert.alert("Başarılı", "Profil bilgilerin başarıyla güncellendi!");
       setUserData(prev => ({ ...prev, password: '' })); 
     } catch (err) {
       const serverError = err.response?.data?.error || 'Profil güncellenirken bir hata oluştu.';
@@ -76,14 +95,14 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
         Linking.openURL(response.data.auth_url);
       }
     } catch (err) {
-      console.error("Takvim linki alınamadı:", err);
+      console.error("Takvim bağlantı hatası:", err);
       Alert.alert("Hata", "Takvim bağlantı linki alınamadı.");
     } finally {
       setCalendarLoading(false);
     }
   };
 
-  // --- ÇIKIŞ YAP ---
+  // --- HESAPTAN ÇIKIŞ ---
   const handleLogout = async () => {
     await AsyncStorage.removeItem('access_token');
     await AsyncStorage.removeItem('refresh_token');
@@ -93,12 +112,12 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Öğrenci Profili</Text>
+        <Text style={styles.headerTitle}>Öğrenci Kontrol Merkezi</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
-        {/* PROFİL BAŞLIĞI */}
+        {/* PROFİL BAŞLIĞI KARTI */}
         <View style={styles.profileHeaderCard}>
           <View style={styles.avatarPlaceholder}>
             <MaterialIcons name="school" size={48} color={theme.surface} />
@@ -106,6 +125,21 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           <View style={styles.profileInfo}>
             <Text style={styles.userName}>{userData.username || "Yükleniyor..."}</Text>
             <Text style={styles.userRole}>YKS Adayı</Text>
+          </View>
+        </View>
+
+        {/* GERÇEK VERİLERLE ÇALIŞAN İSTATİSTİK PANELİ */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statBox}>
+            <MaterialIcons name="bar-chart" size={26} color="#10b981" />
+            <Text style={styles.statValue}>{totalReports} Adet</Text>
+            <Text style={styles.statLabel}>Kayıtlı Rapor</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <MaterialIcons name="event-available" size={26} color="#4f46e5" />
+            <Text style={styles.statValue}>{totalLessons} Ders</Text>
+            <Text style={styles.statLabel}>Program Geçmişi</Text>
           </View>
         </View>
 
@@ -121,11 +155,11 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           <Text style={styles.quotaText}>Kalan Soru Hakkı: {credits} / {MAX_CREDITS}</Text>
         </View>
 
-        {/* GOOGLE TAKVİM KARTI */}
+        {/* GOOGLE TAKVİM ENTEGRASYONU */}
         <View style={styles.integrationCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <FontAwesome5 name="google" size={20} color={isCalendarConnected ? theme.primary : theme.text} style={{ marginRight: 12 }} />
-            <Text style={styles.integrationText}>Google Takvim</Text>
+            <FontAwesome5 name="google" size={18} color={isCalendarConnected ? theme.primary : theme.text} style={{ marginRight: 12 }} />
+            <Text style={styles.integrationText}>Google Takvim Entegrasyonu</Text>
           </View>
           {isCalendarConnected ? (
             <View style={styles.connectedBadge}>
@@ -139,7 +173,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           )}
         </View>
 
-        <Text style={styles.sectionTitle}>Hesap Ayarları</Text>
+        <Text style={styles.sectionTitle}>Hesap Bilgilerini Düzenle</Text>
 
         {/* PROFİL GÜNCELLEME FORMU */}
         <View style={styles.formContainer}>
@@ -152,12 +186,12 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
             autoCapitalize="none"
           />
 
-          <Text style={styles.inputLabel}>Yeni Şifre (Boş bırakılabilir)</Text>
+          <Text style={styles.inputLabel}>Yeni Şifre (Değiştirmeyecekseniz boş bırakın)</Text>
           <TextInput 
             style={styles.input}
             value={userData.password}
             onChangeText={(text) => setUserData({...userData, password: text})}
-            placeholder="Yeni şifre belirle..."
+            placeholder="Yeni şifre girin..."
             placeholderTextColor={theme.text + '50'}
             secureTextEntry
           />
@@ -167,16 +201,15 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>Eğitim & Uygulama</Text>
+        <Text style={styles.sectionTitle}>Eğitim & Planlama</Text>
 
-        {/* YÖNLENDİRME MENÜLERİ (ACTIVE OPACITY EKLENDİ) */}
+        {/* YÖNLENDİRME MENÜLERİ */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Schedule')} activeOpacity={0.7}>
           <MaterialIcons name="event-note" size={24} color={theme.text} />
           <Text style={styles.menuText}>Haftalık Programım</Text>
           <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        {/* DİKKAT: Rota adı DailyReport olarak güncellendi! */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('DailyReport')} activeOpacity={0.7}>
           <MaterialIcons name="bar-chart" size={24} color={theme.text} />
           <Text style={styles.menuText}>Gelişim Raporlarım</Text>
@@ -189,7 +222,7 @@ export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode })
           <MaterialIcons name="sync" size={20} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        {/* ÇIKIŞ YAP */}
+        {/* HESAPTAN ÇIKIŞ YAP */}
         <TouchableOpacity style={[styles.menuItem, styles.logoutBtn]} onPress={handleLogout} activeOpacity={0.7}>
           <MaterialIcons name="logout" size={24} color="#ef4444" />
           <Text style={[styles.menuText, { color: '#ef4444' }]}>Hesaptan Çıkış Yap</Text>
@@ -206,33 +239,39 @@ const createStyles = (theme) => StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   scrollContent: { padding: 20, paddingBottom: 40 },
   
-  profileHeaderCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.primary, padding: 20, borderRadius: 16, marginBottom: 20, elevation: 4 },
-  avatarPlaceholder: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: theme.surface },
+  profileHeaderCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.primary, padding: 20, borderRadius: 16, marginBottom: 16, elevation: 4 },
+  avatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: theme.surface },
   profileInfo: { marginLeft: 16 },
-  userName: { fontSize: 20, fontWeight: 'bold', color: theme.surface, marginBottom: 4 },
-  userRole: { fontSize: 14, color: theme.surface, opacity: 0.9 },
+  userName: { fontSize: 18, fontWeight: 'bold', color: theme.surface, marginBottom: 4 },
+  userRole: { fontSize: 13, color: theme.surface, opacity: 0.9 },
+
+  statsContainer: { flexDirection: 'row', backgroundColor: theme.surface, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border, elevation: 1 },
+  statBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  statDivider: { width: 1, backgroundColor: theme.border, marginHorizontal: 8 },
+  statValue: { fontSize: 16, fontWeight: 'bold', color: theme.text, marginTop: 4 },
+  statLabel: { fontSize: 12, color: theme.text, opacity: 0.6, marginTop: 2 },
 
   quotaCard: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border },
   quotaHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  quotaTitle: { fontSize: 16, fontWeight: 'bold', color: theme.text, marginLeft: 8 },
+  quotaTitle: { fontSize: 15, fontWeight: 'bold', color: theme.text, marginLeft: 8 },
   progressBarBg: { height: 10, backgroundColor: theme.border, borderRadius: 5, overflow: 'hidden', marginBottom: 8 },
   progressBarFill: { height: '100%', borderRadius: 5 },
-  quotaText: { fontSize: 13, color: theme.text, opacity: 0.7, textAlign: 'right' },
+  quotaText: { fontSize: 12, color: theme.text, opacity: 0.7, textAlign: 'right' },
 
   integrationCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
-  integrationText: { fontSize: 16, fontWeight: '600', color: theme.text },
+  integrationText: { fontSize: 15, fontWeight: '600', color: theme.text },
   connectedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#dcfce7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   connectedText: { color: '#16a34a', fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
   connectBtn: { backgroundColor: theme.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  connectBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  connectBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: theme.text, opacity: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: theme.text, opacity: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
   
   formContainer: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
   inputLabel: { fontSize: 12, color: theme.text, opacity: 0.7, marginBottom: 6, marginLeft: 4 },
   input: { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, color: theme.text, marginBottom: 16 },
   updateBtn: { backgroundColor: theme.primary, padding: 14, borderRadius: 10, alignItems: 'center' },
-  updateBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  updateBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
   menuItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: theme.border },
   menuText: { fontSize: 15, fontWeight: '600', color: theme.text, marginLeft: 16 },
