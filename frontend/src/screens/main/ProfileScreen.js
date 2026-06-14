@@ -1,104 +1,187 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { lightTheme, darkTheme } from '../../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../../api'; // Kendi api dosyanın yoluna göre düzelt
 
 export default function ProfileScreen({ navigation, isDarkMode, setIsDarkMode }) {
   const theme = isDarkMode ? darkTheme : lightTheme;
   const styles = createStyles(theme);
 
-  // Örnek Kota State'i (Bunu ileride Backend'den çekeceksin)
-  const [quota, setQuota] = useState({ used: 12, total: 50 });
+  // --- STATE YÖNETİMİ ---
+  const [loading, setLoading] = useState(false);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [credits, setCredits] = useState(0);
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+  
+  const [userData, setUserData] = useState({
+    username: '',
+    password: ''
+  });
 
+  const MAX_CREDITS = 20; // Web'deki sınırımız
+
+  // --- VERİLERİ ÇEKME (Sayfa Açıldığında) ---
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const response = await api.get('/auth/profile/');
+      setUserData({
+        username: response.data.username || '',
+        password: '' // Şifreyi güvenlik gereği boş bırakıyoruz
+      });
+      setCredits(response.data.ai_credits || 0);
+      setIsCalendarConnected(response.data.is_calendar_connected || false);
+    } catch (err) {
+      console.error("Profil çekme hatası:", err);
+    }
+  };
+
+  // --- PROFİL GÜNCELLEME ---
+  const handleUpdate = async () => {
+    setLoading(true);
+    try {
+      await api.put('/auth/profile/', userData);
+      Alert.alert("Başarılı", "Profilin başarıyla güncellendi!");
+      setUserData(prev => ({ ...prev, password: '' })); // Şifre alanını temizle
+      fetchProfile(); // Verileri yenile
+    } catch (err) {
+      const serverError = err.response?.data?.error || 'Profil güncellenirken bir hata oluştu.';
+      Alert.alert("Hata", serverError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- GOOGLE TAKVİM ENTEGRASYONU ---
+  const handleConnectCalendar = async () => {
+    setCalendarLoading(true);
+    try {
+      const response = await api.get('/calendar/auth/');
+      if (response.data && response.data.auth_url) {
+        // Mobilde tarayıcıyı açmak için Linking kullanılır
+        Linking.openURL(response.data.auth_url);
+      }
+    } catch (err) {
+      console.error("Takvim linki alınamadı:", err);
+      Alert.alert("Hata", "Takvim bağlantı linki alınamadı.");
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  // --- ÇIKIŞ YAP ---
   const handleLogout = async () => {
-    // Çıkış yaparken token'ı temizle ve Auth (Login) ekranına yönlendir
     await AsyncStorage.removeItem('access_token');
+    await AsyncStorage.removeItem('refresh_token');
     navigation.replace('Login'); 
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Öğrenci Kontrol Merkezi</Text>
+        <Text style={styles.headerTitle}>Öğrenci Profili</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* ÜST BİLGİ KARTI */}
+        {/* PROFİL BAŞLIĞI */}
         <View style={styles.profileHeaderCard}>
           <View style={styles.avatarPlaceholder}>
             <MaterialIcons name="school" size={48} color={theme.surface} />
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.userName}>Öğrenci Profili</Text>
+            <Text style={styles.userName}>{userData.username || "Yükleniyor..."}</Text>
             <Text style={styles.userRole}>YKS Adayı</Text>
           </View>
         </View>
 
-        {/* KOTA VE İSTATİSTİK KARTI */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <MaterialIcons name="auto-awesome" size={28} color={theme.primary} />
-            <Text style={styles.statValue}>{quota.used} / {quota.total}</Text>
-            <Text style={styles.statLabel}>AI Soru Kotası</Text>
+        {/* YAPAY ZEKA KOTASI */}
+        <View style={styles.quotaCard}>
+          <View style={styles.quotaHeader}>
+            <MaterialIcons name="auto-awesome" size={24} color={credits < 5 ? "#ef4444" : theme.primary} />
+            <Text style={styles.quotaTitle}>Yapay Zeka Kotası</Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <MaterialIcons name="local-fire-department" size={28} color="#f97316" />
-            <Text style={styles.statValue}>3 Gün</Text>
-            <Text style={styles.statLabel}>Çalışma Serisi</Text>
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${(credits / MAX_CREDITS) * 100}%`, backgroundColor: credits < 5 ? "#ef4444" : theme.primary }]} />
           </View>
+          <Text style={styles.quotaText}>Kalan Soru Hakkı: {credits} / {MAX_CREDITS}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Eğitim & Planlama</Text>
+        {/* GOOGLE TAKVİM KARTI */}
+        <View style={styles.integrationCard}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <FontAwesome5 name="google" size={20} color={isCalendarConnected ? theme.primary : theme.text} style={{ marginRight: 12 }} />
+            <Text style={styles.integrationText}>Google Takvim</Text>
+          </View>
+          {isCalendarConnected ? (
+            <View style={styles.connectedBadge}>
+              <MaterialIcons name="check-circle" size={16} color="#16a34a" />
+              <Text style={styles.connectedText}>Bağlı</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.connectBtn} onPress={handleConnectCalendar} disabled={calendarLoading}>
+              {calendarLoading ? <ActivityIndicator size="small" color={theme.surface} /> : <Text style={styles.connectBtnText}>Bağla</Text>}
+            </TouchableOpacity>
+          )}
+        </View>
 
-        {/* HAFTALIK PROGRAM BUTONU */}
+        <Text style={styles.sectionTitle}>Hesap Ayarları</Text>
+
+        {/* PROFİL GÜNCELLEME FORMU */}
+        <View style={styles.formContainer}>
+          <Text style={styles.inputLabel}>Kullanıcı Adı / E-Posta</Text>
+          <TextInput 
+            style={styles.input}
+            value={userData.username}
+            onChangeText={(text) => setUserData({...userData, username: text})}
+            placeholderTextColor={theme.text + '50'}
+          />
+
+          <Text style={styles.inputLabel}>Yeni Şifre (Boş bırakılabilir)</Text>
+          <TextInput 
+            style={styles.input}
+            value={userData.password}
+            onChangeText={(text) => setUserData({...userData, password: text})}
+            placeholder="Yeni şifre belirle..."
+            placeholderTextColor={theme.text + '50'}
+            secureTextEntry
+          />
+
+          <TouchableOpacity style={styles.updateBtn} onPress={handleUpdate} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.updateBtnText}>Bilgilerimi Güncelle</Text>}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionTitle}>Eğitim & Uygulama</Text>
+
+        {/* YÖNLENDİRME MENÜLERİ */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Schedule')}>
-          <View style={[styles.iconContainer, { backgroundColor: '#e0e7ff' }]}>
-            <MaterialIcons name="event-note" size={24} color="#4f46e5" />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={styles.menuTitle}>Haftalık Programım</Text>
-            <Text style={styles.menuSubtitle}>Kaydedilen çalışma takvimini gör</Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5 }} />
+          <MaterialIcons name="event-note" size={24} color={theme.text} />
+          <Text style={styles.menuText}>Haftalık Programım</Text>
+          <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        {/* GEÇMİŞ RAPORLAR BUTONU */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Reports')}>
-          <View style={[styles.iconContainer, { backgroundColor: '#dcfce7' }]}>
-            <MaterialIcons name="bar-chart" size={24} color="#16a34a" />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={styles.menuTitle}>Gelişim Raporlarım</Text>
-            <Text style={styles.menuSubtitle}>Günlük çalışma ve çözülen sorular</Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5 }} />
+          <MaterialIcons name="bar-chart" size={24} color={theme.text} />
+          <Text style={styles.menuText}>Gelişim Raporlarım</Text>
+          <MaterialIcons name="chevron-right" size={24} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Uygulama Ayarları</Text>
-
-        {/* TEMA DEĞİŞTİRME BUTONU */}
         <TouchableOpacity style={styles.menuItem} onPress={() => setIsDarkMode(!isDarkMode)}>
-          <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? '#374151' : '#fef08a' }]}>
-            <MaterialIcons name={isDarkMode ? "dark-mode" : "light-mode"} size={24} color={isDarkMode ? "#f9fafb" : "#ca8a04"} />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={styles.menuTitle}>Tema Görünümü</Text>
-            <Text style={styles.menuSubtitle}>{isDarkMode ? "Karanlık Mod Aktif" : "Aydınlık Mod Aktif"}</Text>
-          </View>
-          <MaterialIcons name="sync" size={20} color={theme.text} style={{ opacity: 0.5 }} />
+          <MaterialIcons name={isDarkMode ? "dark-mode" : "light-mode"} size={24} color={theme.text} />
+          <Text style={styles.menuText}>Tema Görünümü ({isDarkMode ? "Karanlık" : "Aydınlık"})</Text>
+          <MaterialIcons name="sync" size={20} color={theme.text} style={{ opacity: 0.5, marginLeft: 'auto' }} />
         </TouchableOpacity>
 
-        {/* ÇIKIŞ YAP BUTONU */}
+        {/* ÇIKIŞ YAP */}
         <TouchableOpacity style={[styles.menuItem, styles.logoutBtn]} onPress={handleLogout}>
-          <View style={[styles.iconContainer, { backgroundColor: '#fee2e2' }]}>
-            <MaterialIcons name="logout" size={24} color="#ef4444" />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={[styles.menuTitle, { color: '#ef4444' }]}>Hesaptan Çıkış Yap</Text>
-          </View>
+          <MaterialIcons name="logout" size={24} color="#ef4444" />
+          <Text style={[styles.menuText, { color: '#ef4444' }]}>Hesaptan Çıkış Yap</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -112,25 +195,36 @@ const createStyles = (theme) => StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   scrollContent: { padding: 20, paddingBottom: 40 },
   
-  profileHeaderCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.primary, padding: 20, borderRadius: 16, marginBottom: 20, elevation: 4, shadowColor: theme.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  profileHeaderCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.primary, padding: 20, borderRadius: 16, marginBottom: 20, elevation: 4 },
   avatarPlaceholder: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: theme.surface },
   profileInfo: { marginLeft: 16 },
-  userName: { fontSize: 22, fontWeight: 'bold', color: theme.surface, marginBottom: 4 },
+  userName: { fontSize: 20, fontWeight: 'bold', color: theme.surface, marginBottom: 4 },
   userRole: { fontSize: 14, color: theme.surface, opacity: 0.9 },
 
-  statsContainer: { flexDirection: 'row', backgroundColor: theme.surface, borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border, elevation: 2 },
-  statBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  statDivider: { width: 1, backgroundColor: theme.border, marginHorizontal: 10 },
-  statValue: { fontSize: 18, fontWeight: 'bold', color: theme.text, marginTop: 8 },
-  statLabel: { fontSize: 12, color: theme.text, opacity: 0.6, marginTop: 4 },
+  quotaCard: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border },
+  quotaHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  quotaTitle: { fontSize: 16, fontWeight: 'bold', color: theme.text, marginLeft: 8 },
+  progressBarBg: { height: 10, backgroundColor: theme.border, borderRadius: 5, overflow: 'hidden', marginBottom: 8 },
+  progressBarFill: { height: '100%', borderRadius: 5 },
+  quotaText: { fontSize: 13, color: theme.text, opacity: 0.7, textAlign: 'right' },
+
+  integrationCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
+  integrationText: { fontSize: 16, fontWeight: '600', color: theme.text },
+  connectedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#dcfce7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  connectedText: { color: '#16a34a', fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
+  connectBtn: { backgroundColor: theme.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  connectBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
   sectionTitle: { fontSize: 14, fontWeight: '700', color: theme.text, opacity: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
   
+  formContainer: { backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: theme.border },
+  inputLabel: { fontSize: 12, color: theme.text, opacity: 0.7, marginBottom: 6, marginLeft: 4 },
+  input: { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, color: theme.text, marginBottom: 16 },
+  updateBtn: { backgroundColor: theme.primary, padding: 14, borderRadius: 10, alignItems: 'center' },
+  updateBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
   menuItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: theme.border },
-  iconContainer: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  menuTextContainer: { flex: 1, marginLeft: 16 },
-  menuTitle: { fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 2 },
-  menuSubtitle: { fontSize: 12, color: theme.text, opacity: 0.6 },
+  menuText: { fontSize: 15, fontWeight: '600', color: theme.text, marginLeft: 16 },
   
   logoutBtn: { borderColor: '#fecaca', backgroundColor: '#fef2f2', marginTop: 10 }
 });
