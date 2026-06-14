@@ -4,7 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import api from '../../api';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
-export default function RegisterScreen({ navigation, isDarkMode, toggleTheme }) {
+export default function RegisterScreen({ navigation, isDarkMode, setIsDarkMode }) {
   const theme = isDarkMode ? darkTheme : lightTheme;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -55,7 +55,7 @@ export default function RegisterScreen({ navigation, isDarkMode, toggleTheme }) 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
         {/* TEMA DEĞİŞTİRME BUTONU (App.js düzeltilince tıkır tıkır çalışacak) */}
-        <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme} activeOpacity={0.6}>
+        <TouchableOpacity style={styles.themeToggle} onPress={() => setIsDarkMode(!isDarkMode)} activeOpacity={0.6}>
           <MaterialIcons name={isDarkMode ? "brightness-7" : "brightness-4"} size={28} color={theme.primary} />
         </TouchableOpacity>
 
