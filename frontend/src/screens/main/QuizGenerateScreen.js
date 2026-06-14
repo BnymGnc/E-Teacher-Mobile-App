@@ -9,12 +9,16 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
   const styles = createStyles(theme, isDarkMode);
 
   const [topic, setTopic] = useState('');
-  const [difficulty, setDifficulty] = useState('Orta'); // Kolay, Orta, Zor
-  const [questionCount, setQuestionCount] = useState(3); // 1-10 arası
+  const [difficulty, setDifficulty] = useState('Orta'); 
+  const [questionCount, setQuestionCount] = useState(3); 
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [quizResult, setQuizResult] = useState(null); // Backend'den gelen test verisi
+  const [quizResult, setQuizResult] = useState(null); 
+
+  // --- İNTERAKTİF TEST STATELERİ ---
+  const [selectedAnswers, setSelectedAnswers] = useState({}); // Hangi soruda hangi şıkkı seçtiğini tutar { 0: 1, 1: 3 }
+  const [isQuizSubmitted, setIsQuizSubmitted] = useState(false); // "Testi Bitir" butonuna basılıp basılmadığını tutar
 
   const incrementCount = () => { if (questionCount < 10) setQuestionCount(prev => prev + 1); };
   const decrementCount = () => { if (questionCount > 1) setQuestionCount(prev => prev - 1); };
@@ -28,17 +32,19 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
     setLoading(true);
     setError(null);
     setQuizResult(null);
+    
+    // Yeni test üretilirken eski cevapları sıfırla
+    setSelectedAnswers({});
+    setIsQuizSubmitted(false);
     Keyboard.dismiss();
 
     try {
-      // Backend'deki ML test üretme endpoint'ine istek atılıyor
       const response = await api.post('/quiz-generate/', { 
         topic: topic,
         difficulty: difficulty,
         count: questionCount
       });
       
-      // Gelen veriyi (string veya array/obje) state'e atıyoruz
       setQuizResult(response.data.quiz || response.data.result || response.data.reply || response.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Yapay zeka testi üretirken bir hata oluştu.');
@@ -47,9 +53,26 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
     }
   };
 
+  // Şık işaretleme fonksiyonu
+  const handleSelectOption = (questionIndex, optionIndex) => {
+    if (isQuizSubmitted) return; // Eğer test bittiyse şık değiştirmeye izin verme
+    setSelectedAnswers(prev => ({
+      ...prev,
+      [questionIndex]: optionIndex
+    }));
+  };
+
+  // Doğru şıkkı algılama yardımcısı
+  const isOptionCorrect = (correctAnswerText, optionText, optionIndex) => {
+    if (!correctAnswerText) return false;
+    const letter = String.fromCharCode(65 + optionIndex); // A, B, C, D
+    return correctAnswerText.includes(optionText) || correctAnswerText.startsWith(letter);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      {/* Kaydırma sorunu çıkaran behavior ayarı Android için null yapıldı */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         
         {/* Üst App Bar */}
         <View style={styles.appBar}>
@@ -60,7 +83,12 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
           <View style={styles.placeholderBtn} />
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Scroll Content içine flexGrow eklendi */}
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           
           <View style={styles.cardContainer}>
             <View style={styles.cardHeader}>
@@ -69,7 +97,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
             </View>
             <Text style={styles.infoText}>Eksik olduğunuz konuyu yazın, yapay zeka seviyenize uygun bir mini-test hazırlasın.</Text>
 
-            {/* Konu Girişi */}
             <Text style={styles.inputLabel}>Ders veya Konu (Örn: TYT Optik, AYT Türev)</Text>
             <TextInput
               style={styles.textInput}
@@ -79,7 +106,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
               onChangeText={(text) => { setTopic(text); if (error) setError(null); }}
             />
 
-            {/* Zorluk Seviyesi Seçici */}
             <Text style={[styles.inputLabel, { marginTop: 20 }]}>Zorluk Seviyesi</Text>
             <View style={styles.difficultyGroup}>
               {['Kolay', 'Orta', 'Zor'].map((level) => (
@@ -99,7 +125,6 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
               ))}
             </View>
 
-            {/* Soru Sayısı Ayarlayıcı */}
             <View style={styles.counterRow}>
               <Text style={styles.inputLabel}>Soru Sayısı</Text>
               <View style={styles.counterControl}>
@@ -120,7 +145,7 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
               </View>
             )}
 
-            <TouchableOpacity style={styles.actionBtn} onPress={handleGenerateQuiz} disabled={loading}>
+            <TouchableOpacity style={styles.actionBtn} onPress={handleGenerateQuiz} disabled={loading} activeOpacity={0.8}>
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
@@ -132,7 +157,7 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
             </TouchableOpacity>
           </View>
 
-          {/* Quiz Sonuç Alanı (JSON VE STRING PARSER EKLENDİ) */}
+          {/* İNTERAKTİF QUİZ SONUÇ ALANI */}
           {quizResult && (
             <View style={styles.resultBox}>
               <View style={styles.resultHeader}>
@@ -142,39 +167,84 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
               <View style={styles.resultContent}>
                 
                 {Array.isArray(quizResult) ? (
-                  // EĞER BACKEND DİZİ (ARRAY OF OBJECTS) GÖNDERDİYSE:
-                  quizResult.map((item, index) => (
-                    <View key={index} style={styles.questionCard}>
-                      <Text style={[styles.questionText, { color: theme.text }]}>
-                        {index + 1}. {item.question || "Soru metni bulunamadı."}
-                      </Text>
-                      
-                      {item.options && Array.isArray(item.options) && item.options.map((opt, i) => (
-                        <Text key={i} style={[styles.optionText, { color: theme.textSecondary }]}>
-                          {String.fromCharCode(65 + i)}) {opt}
+                  <>
+                    {quizResult.map((item, qIndex) => (
+                      <View key={qIndex} style={styles.questionCard}>
+                        <Text style={[styles.questionText, { color: theme.text }]}>
+                          {qIndex + 1}. {item.question || "Soru metni bulunamadı."}
                         </Text>
-                      ))}
-                      
-                      <View style={[styles.answerBox, { backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5' }]}>
-                        <Text style={[styles.correctAnswerText, { color: isDarkMode ? '#34d399' : '#059669' }]}>
-                          Doğru Cevap: {item.correctAnswer || "Belirtilmemiş"}
-                        </Text>
-                        {item.explanation && (
-                          <Text style={[styles.explanationText, { color: isDarkMode ? '#a7f3d0' : '#047857' }]}>
-                            Açıklama: {item.explanation}
-                          </Text>
+                        
+                        {item.options && Array.isArray(item.options) && item.options.map((opt, optIndex) => {
+                          const isSelected = selectedAnswers[qIndex] === optIndex;
+                          const isCorrect = isOptionCorrect(item.correctAnswer, opt, optIndex);
+
+                          // Şıkların Stilleri (İşaretleme ve Teslim Sonrası Renkler)
+                          let optionBtnStyle = [styles.optionBtn, { borderColor: theme.border, backgroundColor: theme.background }];
+                          let optionTextStyle = [styles.optionText, { color: theme.text }];
+
+                          if (isSelected) {
+                            optionBtnStyle.push(styles.optionBtnSelected, { borderColor: theme.primary, backgroundColor: theme.primary + '15' });
+                            optionTextStyle.push(styles.optionTextSelected, { color: theme.primary });
+                          }
+
+                          if (isQuizSubmitted) {
+                            if (isCorrect) {
+                              optionBtnStyle.push(styles.optionBtnCorrect, { borderColor: '#10b981', backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5' });
+                              optionTextStyle.push(styles.optionTextCorrect, { color: isDarkMode ? '#34d399' : '#059669' });
+                            } else if (isSelected && !isCorrect) {
+                              optionBtnStyle.push(styles.optionBtnWrong, { borderColor: '#ef4444', backgroundColor: isDarkMode ? '#7f1d1d' : '#fef2f2' });
+                              optionTextStyle.push(styles.optionTextWrong, { color: isDarkMode ? '#fca5a5' : '#b91c1c' });
+                            }
+                          }
+
+                          return (
+                            <TouchableOpacity 
+                              key={optIndex} 
+                              style={optionBtnStyle}
+                              onPress={() => handleSelectOption(qIndex, optIndex)}
+                              activeOpacity={isQuizSubmitted ? 1 : 0.6}
+                            >
+                              <Text style={optionTextStyle}>
+                                {String.fromCharCode(65 + optIndex)}) {opt}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                        
+                        {/* Çözüm ve Doğru Cevap Kutusu (SADECE TEST BİTİNCE AÇILIR) */}
+                        {isQuizSubmitted && (
+                          <View style={[styles.answerBox, { backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5' }]}>
+                            <Text style={[styles.correctAnswerText, { color: isDarkMode ? '#34d399' : '#059669' }]}>
+                              Doğru Cevap: {item.correctAnswer || "Belirtilmemiş"}
+                            </Text>
+                            {item.explanation && (
+                              <Text style={[styles.explanationText, { color: isDarkMode ? '#a7f3d0' : '#047857' }]}>
+                                Açıklama: {item.explanation}
+                              </Text>
+                            )}
+                          </View>
                         )}
                       </View>
-                    </View>
-                  ))
+                    ))}
+
+                    {/* Testi Bitir Butonu */}
+                    {!isQuizSubmitted && (
+                      <TouchableOpacity 
+                        style={styles.submitQuizBtn} 
+                        onPress={() => setIsQuizSubmitted(true)}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialIcons name="done-all" size={24} color="#fff" style={{ marginRight: 8 }} />
+                        <Text style={styles.submitQuizBtnText}>Testi Bitir ve Sonuçları Gör</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
                 ) : typeof quizResult === 'object' ? (
-                  // EĞER BACKEND TEK BİR OBJE GÖNDERDİYSE (JSON):
-                  <Text style={styles.resultText}>
+                  <Text style={[styles.resultText, { color: theme.text }]}>
                     {JSON.stringify(quizResult, null, 2)}
                   </Text>
                 ) : (
-                  // EĞER BACKEND DÜMDÜZ METİN (STRING) GÖNDERDİYSE:
-                  <Text style={styles.resultText}>{String(quizResult)}</Text>
+                  <Text style={[styles.resultText, { color: theme.text }]}>{String(quizResult)}</Text>
                 )}
 
               </View>
@@ -194,7 +264,8 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   placeholderBtn: { width: 44, height: 44 },
   appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center' },
   
-  scrollContent: { padding: 16, paddingBottom: 50 },
+  // Kaydırma sorunu için flexGrow eklendi
+  scrollContent: { padding: 16, paddingBottom: 60, flexGrow: 1 },
 
   cardContainer: { backgroundColor: theme.surface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: theme.border, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDarkMode ? 0.3 : 0.05, shadowRadius: 4 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
@@ -221,17 +292,32 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   actionBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 
-  resultBox: { marginTop: 24, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
+  resultBox: { marginTop: 24, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, marginBottom: 40 },
   resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#9c27b0', padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
   resultTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   resultContent: { backgroundColor: theme.surface, padding: 20, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderWidth: 1, borderColor: theme.border, borderTopWidth: 0 },
-  resultText: { fontSize: 15, color: theme.text, lineHeight: 26 },
+  resultText: { fontSize: 15, lineHeight: 26 },
 
-  // EKLENEN YENİ JSON PARSER STİLLERİ
-  questionCard: { marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: theme.border },
-  questionText: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, lineHeight: 22 },
-  optionText: { fontSize: 15, marginBottom: 6, marginLeft: 8 },
-  answerBox: { marginTop: 10, padding: 12, borderRadius: 8 },
-  correctAnswerText: { fontWeight: 'bold', marginBottom: 4 },
-  explanationText: { fontSize: 13, lineHeight: 18 }
+  // İNTERAKTİF QUİZ STİLLERİ
+  questionCard: { marginBottom: 24, paddingBottom: 20, borderBottomWidth: 1, borderColor: theme.border },
+  questionText: { fontSize: 16, fontWeight: 'bold', marginBottom: 16, lineHeight: 24 },
+  
+  optionBtn: { padding: 14, borderWidth: 1, borderRadius: 12, marginBottom: 10 },
+  optionText: { fontSize: 15 },
+  
+  optionBtnSelected: { borderWidth: 2 },
+  optionTextSelected: { fontWeight: 'bold' },
+  
+  optionBtnCorrect: { borderWidth: 2 },
+  optionTextCorrect: { fontWeight: 'bold' },
+  
+  optionBtnWrong: { borderWidth: 2 },
+  optionTextWrong: { fontWeight: 'bold' },
+
+  answerBox: { marginTop: 16, padding: 16, borderRadius: 12 },
+  correctAnswerText: { fontWeight: 'bold', marginBottom: 8, fontSize: 15 },
+  explanationText: { fontSize: 14, lineHeight: 22 },
+
+  submitQuizBtn: { flexDirection: 'row', backgroundColor: '#10b981', padding: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 10, elevation: 2 },
+  submitQuizBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
 });
