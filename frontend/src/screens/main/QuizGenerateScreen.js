@@ -14,7 +14,7 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [quizResult, setQuizResult] = useState(''); // Backend'den gelen test verisi
+  const [quizResult, setQuizResult] = useState(null); // Backend'den gelen test verisi
 
   const incrementCount = () => { if (questionCount < 10) setQuestionCount(prev => prev + 1); };
   const decrementCount = () => { if (questionCount > 1) setQuestionCount(prev => prev - 1); };
@@ -27,7 +27,7 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
 
     setLoading(true);
     setError(null);
-    setQuizResult('');
+    setQuizResult(null);
     Keyboard.dismiss();
 
     try {
@@ -38,8 +38,8 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
         count: questionCount
       });
       
-      // Gelen veriyi (string veya array) state'e atıyoruz
-      setQuizResult(response.data.quiz || response.data.result || response.data.reply);
+      // Gelen veriyi (string veya array/obje) state'e atıyoruz
+      setQuizResult(response.data.quiz || response.data.result || response.data.reply || response.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Yapay zeka testi üretirken bir hata oluştu.');
     } finally {
@@ -132,15 +132,51 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
             </TouchableOpacity>
           </View>
 
-          {/* Quiz Sonuç Alanı */}
-          {quizResult !== '' && (
+          {/* Quiz Sonuç Alanı (JSON VE STRING PARSER EKLENDİ) */}
+          {quizResult && (
             <View style={styles.resultBox}>
               <View style={styles.resultHeader}>
                 <MaterialIcons name="assignment" size={24} color="#fff" />
                 <Text style={styles.resultTitle}>Özel Testiniz Hazır</Text>
               </View>
               <View style={styles.resultContent}>
-                <Text style={styles.resultText}>{quizResult}</Text>
+                
+                {Array.isArray(quizResult) ? (
+                  // EĞER BACKEND DİZİ (ARRAY OF OBJECTS) GÖNDERDİYSE:
+                  quizResult.map((item, index) => (
+                    <View key={index} style={styles.questionCard}>
+                      <Text style={[styles.questionText, { color: theme.text }]}>
+                        {index + 1}. {item.question || "Soru metni bulunamadı."}
+                      </Text>
+                      
+                      {item.options && Array.isArray(item.options) && item.options.map((opt, i) => (
+                        <Text key={i} style={[styles.optionText, { color: theme.textSecondary }]}>
+                          {String.fromCharCode(65 + i)}) {opt}
+                        </Text>
+                      ))}
+                      
+                      <View style={[styles.answerBox, { backgroundColor: isDarkMode ? '#064e3b' : '#ecfdf5' }]}>
+                        <Text style={[styles.correctAnswerText, { color: isDarkMode ? '#34d399' : '#059669' }]}>
+                          Doğru Cevap: {item.correctAnswer || "Belirtilmemiş"}
+                        </Text>
+                        {item.explanation && (
+                          <Text style={[styles.explanationText, { color: isDarkMode ? '#a7f3d0' : '#047857' }]}>
+                            Açıklama: {item.explanation}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))
+                ) : typeof quizResult === 'object' ? (
+                  // EĞER BACKEND TEK BİR OBJE GÖNDERDİYSE (JSON):
+                  <Text style={styles.resultText}>
+                    {JSON.stringify(quizResult, null, 2)}
+                  </Text>
+                ) : (
+                  // EĞER BACKEND DÜMDÜZ METİN (STRING) GÖNDERDİYSE:
+                  <Text style={styles.resultText}>{String(quizResult)}</Text>
+                )}
+
               </View>
             </View>
           )}
@@ -189,5 +225,13 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#9c27b0', padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
   resultTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   resultContent: { backgroundColor: theme.surface, padding: 20, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderWidth: 1, borderColor: theme.border, borderTopWidth: 0 },
-  resultText: { fontSize: 15, color: theme.text, lineHeight: 26 }
+  resultText: { fontSize: 15, color: theme.text, lineHeight: 26 },
+
+  // EKLENEN YENİ JSON PARSER STİLLERİ
+  questionCard: { marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: theme.border },
+  questionText: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, lineHeight: 22 },
+  optionText: { fontSize: 15, marginBottom: 6, marginLeft: 8 },
+  answerBox: { marginTop: 10, padding: 12, borderRadius: 8 },
+  correctAnswerText: { fontWeight: 'bold', marginBottom: 4 },
+  explanationText: { fontSize: 13, lineHeight: 18 }
 });
