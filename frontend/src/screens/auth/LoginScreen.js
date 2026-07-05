@@ -24,16 +24,28 @@ export default function LoginScreen({ navigation, isDarkMode, setIsDarkMode }) {
     
     try {
       const response = await api.post('/auth/login/', { 
-        username: email, 
+        username: email.trim(),
         password: password 
       });
+
+      if (!response.data?.access || !response.data?.refresh) {
+        throw new Error('Backend geçerli oturum tokenları döndürmedi.');
+      }
 
       await AsyncStorage.setItem('access_token', response.data.access);
       await AsyncStorage.setItem('refresh_token', response.data.refresh);
       
       navigation.replace('MainApp');
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Giriş yapılamadı. E-posta veya şifreniz hatalı.';
+      let msg = err.response?.data?.detail || err.response?.data?.error;
+
+      if (err.code === 'ECONNABORTED') {
+        msg = 'Render sunucusu zamanında yanıt vermedi. Lütfen tekrar deneyin.';
+      } else if (!err.response) {
+        msg = 'Render sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edin.';
+      }
+
+      msg ||= 'Giriş yapılamadı. E-posta veya şifrenizi kontrol edin.';
       setError(msg);
     } finally {
       setLoading(false);

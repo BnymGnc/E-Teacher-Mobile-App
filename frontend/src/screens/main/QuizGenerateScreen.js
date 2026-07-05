@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Keyboard } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../api';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
 export default function QuizGenerateScreen({ navigation, isDarkMode }) {
+  const insets = useSafeAreaInsets();
   const theme = isDarkMode ? darkTheme : lightTheme;
   const styles = createStyles(theme, isDarkMode);
 
@@ -78,14 +80,15 @@ export default function QuizGenerateScreen({ navigation, isDarkMode }) {
       </View>
 
       {/* 2. KLAVYE KATMANI SADECE SCROLL'U KAPSIYOR */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         
         {/* 3. SCROLLVIEW flex:1 İLE TAM EKRANA YAYILDI VE flexGrow KALDIRILDI */}
         <ScrollView 
           style={{ flex: 1 }} 
           showsVerticalScrollIndicator={false} 
-          contentContainerStyle={{ padding: 16, paddingBottom: 150 }} // Kaydırma garantisi için devasa alt boşluk
+          contentContainerStyle={{ padding: 16, paddingBottom: Math.max(32, insets.bottom + 24) }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           
           <View style={styles.cardContainer}>

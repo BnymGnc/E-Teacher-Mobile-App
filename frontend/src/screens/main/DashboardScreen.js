@@ -1,15 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Platform, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, SafeAreaView, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
-const { width } = Dimensions.get('window');
-const cardWidth = (width - 56) / 2; // Grid boşluk matematiği optimize edildi
-
 export default function DashboardScreen({ navigation, isDarkMode, setIsDarkMode }) {
+  const { width } = useWindowDimensions();
   // Seçili temayı dinamik olarak belirliyoruz
   const theme = isDarkMode ? darkTheme : lightTheme;
-  const styles = createStyles(theme, isDarkMode);
+  const styles = createStyles(theme, isDarkMode, width);
 
   // Web Dashboard verilerinin navigasyon rotalarıyla zenginleştirilmiş hali
   const quickLinks = [
@@ -27,9 +25,9 @@ export default function DashboardScreen({ navigation, isDarkMode, setIsDarkMode 
         
         {/* Üst Karşılama Alanı */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerTextArea}>
             <Text style={styles.greeting}>Hoş Geldin! 👋</Text>
-            <Text style={styles.subText}>Çalışmalarını takip et ve hedeflerine ulaş.</Text>
+            <Text style={styles.subText} numberOfLines={2}>Çalışmalarını takip et ve hedeflerine ulaş.</Text>
           </View>
           <View style={styles.headerRight}>
             {/* Tema Değiştirme Butonu (Güneş / Ay) - DÜZELTİLDİ */}
@@ -38,7 +36,14 @@ export default function DashboardScreen({ navigation, isDarkMode, setIsDarkMode 
             </TouchableOpacity>
             
             {/* Profil Butonu */}
-            <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7} onPress={() => navigation.navigate('Profile')}>
+            <TouchableOpacity
+              style={styles.profileBtn}
+              activeOpacity={0.7}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Profil ekranını aç"
+              onPress={() => navigation.navigate('Profil')}
+            >
               <MaterialIcons name="person" size={28} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -91,15 +96,20 @@ export default function DashboardScreen({ navigation, isDarkMode, setIsDarkMode 
   );
 }
 
-const createStyles = (theme, isDarkMode) => StyleSheet.create({
+const createStyles = (theme, isDarkMode, screenWidth) => {
+  const isCompact = screenWidth < 360;
+  const cardWidth = isCompact ? screenWidth - 32 : (screenWidth - 56) / 2;
+
+  return StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.background },
   container: { flex: 1, backgroundColor: theme.background },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: isCompact ? 16 : 20, paddingTop: 20, paddingBottom: 40 },
   
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Platform.OS === 'android' ? 20 : 10, marginBottom: 25 },
-  greeting: { fontSize: 26, fontWeight: 'bold', color: theme.text },
+  header: { flexDirection: 'row', alignItems: 'center', marginTop: Platform.OS === 'android' ? 20 : 10, marginBottom: 25 },
+  headerTextArea: { flex: 1, minWidth: 0, paddingRight: 12 },
+  greeting: { fontSize: isCompact ? 22 : 26, fontWeight: 'bold', color: theme.text },
   subText: { fontSize: 14, color: theme.textSecondary, marginTop: 4 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: isCompact ? 8 : 12, flexShrink: 0 },
   
   themeBtn: { backgroundColor: theme.surface, width: 46, height: 46, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme.border, elevation: 1 },
   profileBtn: { backgroundColor: theme.primary, width: 46, height: 46, borderRadius: 14, justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: theme.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
@@ -116,7 +126,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   gridCard: { 
     width: cardWidth, 
     backgroundColor: theme.surface, 
-    padding: 20, 
+    padding: isCompact ? 16 : 20,
     borderRadius: 20, 
     alignItems: 'center', 
     borderWidth: 1, 
@@ -133,4 +143,5 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   
   footerStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 30, opacity: 0.6 },
   footerStatusText: { fontSize: 12, color: theme.textSecondary, fontWeight: '500' }
-});
+  });
+};

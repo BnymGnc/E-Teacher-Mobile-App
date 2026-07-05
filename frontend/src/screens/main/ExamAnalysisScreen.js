@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lightTheme, darkTheme } from '../../theme/colors';
 
 export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
+  const insets = useSafeAreaInsets();
   const theme = isDarkMode ? darkTheme : lightTheme;
   const styles = createStyles(theme, isDarkMode);
 
@@ -113,11 +115,12 @@ export default function ExamAnalysisScreen({ navigation, isDarkMode }) {
         <View style={styles.placeholderBtn} />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : null} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(32, insets.bottom + 24) }]}
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           
           <View style={styles.headerInfo}>
@@ -223,7 +226,7 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   placeholderBtn: { width: 44, height: 44 },
   appBarTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   
-  scrollContent: { flexGrow: 1, padding: 16, paddingBottom: 60 },
+  scrollContent: { flexGrow: 1, padding: 16 },
 
   headerInfo: { alignItems: 'center', marginBottom: 24, marginTop: 10 },
   mainTitle: { fontSize: 22, fontWeight: 'bold', color: theme.text, textAlign: 'center', marginTop: 12, lineHeight: 30 },

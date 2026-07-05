@@ -18,6 +18,9 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [reportHistory, setReportHistory] = useState([]);
+  const [reportStats, setReportStats] = useState({ avgProductivity: '0.0', avgHours: '0.0' });
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Tarih İşlemleri
   const today = new Date();
@@ -25,6 +28,52 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
   const days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
   const dayName = days[today.getDay()];
   const formattedDate = today.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+
+  const fetchReportHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await api.get('/report/all/');
+      const reports = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.reports) ? response.data.reports : []);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const cutoff = new Date(todayEnd);
+      cutoff.setDate(cutoff.getDate() - 29);
+      cutoff.setHours(0, 0, 0, 0);
+
+      const uniqueReports = new Map();
+      reports.forEach((report) => {
+        if (!report?.date) return;
+        const reportDate = new Date(`${report.date}T00:00:00`);
+        if (!Number.isNaN(reportDate.getTime()) && reportDate >= cutoff && reportDate <= todayEnd) {
+          uniqueReports.set(report.date, report);
+        }
+      });
+
+      const lastThirtyDays = Array.from(uniqueReports.values())
+        .sort((first, second) => new Date(second.date) - new Date(first.date));
+      const totalProductivity = lastThirtyDays.reduce(
+        (sum, report) => sum + (Number(report.productivityScore ?? report.productivity) || 0),
+        0
+      );
+      const totalHours = lastThirtyDays.reduce(
+        (sum, report) => sum + (Number(report.studyHours) || 0),
+        0
+      );
+
+      setReportHistory(lastThirtyDays);
+      setReportStats({
+        avgProductivity: lastThirtyDays.length ? (totalProductivity / lastThirtyDays.length).toFixed(1) : '0.0',
+        avgHours: lastThirtyDays.length ? (totalHours / lastThirtyDays.length).toFixed(1) : '0.0',
+      });
+    } catch (err) {
+      setReportHistory([]);
+      setReportStats({ avgProductivity: '0.0', avgHours: '0.0' });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   // SAYFAYA HER GİRİLDİĞİNDE BUGÜNÜN RAPORUNU ÇEK (useFocusEffect ile güncellendi)
   useFocusEffect(
@@ -52,11 +101,12 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
       };
 
       fetchTodayReport();
+      fetchReportHistory();
 
       return () => {
         isActive = false; // Component unmount olursa memory leak önle
       };
-    }, [currentDate])
+    }, [currentDate, fetchReportHistory])
   );
 
   // AI ANALİZİ OLUŞTURMA
@@ -113,6 +163,7 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
       });
 
       setSuccess('Günlük çalışma raporu başarıyla veritabanına kaydedildi!');
+      await fetchReportHistory();
       setTimeout(() => setSuccess(null), 4000);
     } catch (err) {
       setError('Kaydedilirken bir sunucu hatası oluştu.');
@@ -124,7 +175,7 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         
         <View style={styles.appBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.6}>
@@ -192,8 +243,10 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
                 setMessage(text);
                 if (error) setError(null);
               }}
+              maxLength={700}
               textAlignVertical="top"
             />
+            <Text style={styles.characterCounter}>{message.length}/700</Text>
           </View>
 
           {error && (
@@ -242,6 +295,54 @@ export default function DailyReportScreen({ navigation, isDarkMode }) {
             </View>
           )}
 
+          <View style={styles.historySection}>
+            <View style={styles.historyTitleRow}>
+              <View>
+                <Text style={styles.historyTitle}>Son 30 Gün</Text>
+                <Text style={styles.historySubtitle}>{reportHistory.length} kayıtlı rapor</Text>
+              </View>
+              <MaterialIcons name="insights" size={28} color={theme.primary} />
+            </View>
+
+            <View style={styles.statsContainer}>
+              <View style={styles.statBox}>
+                <MaterialIcons name="star" size={24} color="#f59e0b" />
+                <Text style={styles.statValue}>{reportStats.avgProductivity} / 10</Text>
+                <Text style={styles.statLabel}>Ort. Verimlilik</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <MaterialIcons name="schedule" size={24} color="#3b82f6" />
+                <Text style={styles.statValue}>{reportStats.avgHours} Saat</Text>
+                <Text style={styles.statLabel}>Günlük Ort. Çalışma</Text>
+              </View>
+            </View>
+
+            <View style={styles.historyCard}>
+              {historyLoading ? (
+                <ActivityIndicator color={theme.primary} style={styles.historyLoader} />
+              ) : reportHistory.length > 0 ? reportHistory.map((report, index) => (
+                <View
+                  key={report.date}
+                  style={[styles.historyItem, index === reportHistory.length - 1 && styles.historyItemLast]}
+                >
+                  <View style={styles.historyDateBadge}>
+                    <MaterialIcons name="event-note" size={18} color={theme.primary} />
+                    <Text style={styles.historyDate}>{new Date(`${report.date}T00:00:00`).toLocaleDateString('tr-TR')}</Text>
+                  </View>
+                  <Text style={styles.historyMetrics}>
+                    {report.productivityScore ?? report.productivity ?? 0}/10  •  {report.studyHours || 0} saat
+                  </Text>
+                  {(report.dailyNotes || report.report) ? (
+                    <Text style={styles.historyNote} numberOfLines={2}>{report.dailyNotes || report.report}</Text>
+                  ) : null}
+                </View>
+              )) : (
+                <Text style={styles.emptyHistoryText}>Son 30 güne ait kaydedilmiş rapor bulunmuyor.</Text>
+              )}
+            </View>
+          </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -267,7 +368,8 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   inputLabel: { fontSize: 13, fontWeight: '600', color: theme.textSecondary, marginBottom: 8 },
   textInput: { backgroundColor: theme.background, color: theme.text, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 14, fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
   
-  textArea: { backgroundColor: theme.background, color: theme.text, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 16, fontSize: 15, height: 120 },
+  textArea: { backgroundColor: theme.background, color: theme.text, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 16, paddingBottom: 28, fontSize: 15, height: 140 },
+  characterCounter: { color: theme.textSecondary, fontSize: 12, fontWeight: '600', textAlign: 'right', marginTop: 6 },
 
   errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2', padding: 14, borderRadius: 12, marginTop: 16, borderWidth: 1, borderColor: '#fecaca' },
   errorText: { color: '#ef4444', marginLeft: 10, fontSize: 14, flex: 1, fontWeight: '500' },
@@ -286,5 +388,24 @@ const createStyles = (theme, isDarkMode) => StyleSheet.create({
   aiResultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: theme.primary, padding: 16 },
   aiResultTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   aiResultContent: { backgroundColor: theme.surface, padding: 20 },
-  aiResultText: { fontSize: 15, color: theme.text, lineHeight: 24, fontStyle: 'italic' }
+  aiResultText: { fontSize: 15, color: theme.text, lineHeight: 24, fontStyle: 'italic' },
+
+  historySection: { marginTop: 28 },
+  historyTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 2 },
+  historyTitle: { fontSize: 19, fontWeight: '800', color: theme.text },
+  historySubtitle: { fontSize: 12, color: theme.textSecondary, marginTop: 2 },
+  statsContainer: { flexDirection: 'row', backgroundColor: theme.surface, borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: theme.border },
+  statBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  statDivider: { width: 1, backgroundColor: theme.border, marginHorizontal: 8 },
+  statValue: { fontSize: 16, fontWeight: '800', color: theme.text, marginTop: 5 },
+  statLabel: { fontSize: 11, color: theme.textSecondary, marginTop: 3, textAlign: 'center' },
+  historyCard: { backgroundColor: theme.surface, borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
+  historyLoader: { paddingVertical: 28 },
+  historyItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: theme.border },
+  historyItemLast: { borderBottomWidth: 0 },
+  historyDateBadge: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  historyDate: { color: theme.primary, fontWeight: '800', fontSize: 14 },
+  historyMetrics: { color: theme.text, fontSize: 14, fontWeight: '700', marginTop: 8 },
+  historyNote: { color: theme.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  emptyHistoryText: { color: theme.textSecondary, fontSize: 14, fontStyle: 'italic', textAlign: 'center', padding: 24 }
 });

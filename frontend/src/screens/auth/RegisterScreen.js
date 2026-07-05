@@ -33,7 +33,7 @@ export default function RegisterScreen({ navigation, isDarkMode, setIsDarkMode }
     
     try {
       await api.post('/auth/register/', { 
-        email: email, 
+        email: email.trim(),
         password: password 
       });
       
@@ -44,7 +44,15 @@ export default function RegisterScreen({ navigation, isDarkMode, setIsDarkMode }
       }, 2500);
 
     } catch (err) {
-      const errMsg = err.response?.data?.error || 'Kayıt başarısız oldu. Lütfen tekrar deneyin.';
+      let errMsg = err.response?.data?.error || err.response?.data?.detail;
+
+      if (err.code === 'ECONNABORTED') {
+        errMsg = 'Render sunucusu zamanında yanıt vermedi. Lütfen tekrar deneyin.';
+      } else if (!err.response) {
+        errMsg = 'Render sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edin.';
+      }
+
+      errMsg ||= 'Kayıt başarısız oldu. Lütfen tekrar deneyin.';
       setError(errMsg);
     } finally {
       setLoading(false);

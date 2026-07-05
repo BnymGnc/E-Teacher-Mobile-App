@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { lightTheme, darkTheme } from './src/theme/colors';
 
 // Ekran İmportları
@@ -75,9 +76,10 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
         
         {/* Auth Ekranları */}
         <Stack.Screen name="Login">
@@ -114,7 +116,8 @@ export default function App() {
           {(props) => <DailyReportScreen {...props} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
         </Stack.Screen>
 
-      </Stack.Navigator>
-    </NavigationContainer>
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
