@@ -20,12 +20,18 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.bnymgnc.eteacher",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "dba255db-44dd-48c4-9158-2e78eab13555"
+      }
     }
   }
 }
